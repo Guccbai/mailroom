@@ -11,10 +11,14 @@
     "generate-types": "wrangler types --env-file .dev.vars.example",
     "lint": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run",
-    "typecheck": "tsc -p tsconfig.json --noEmit"
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "web:build": "node scripts/build-web-assets.mjs"
   },
   "dependencies": {
+    "@cloudflare/workers-oauth-provider": "1.2.4",
     "@mailroom/core": "workspace:*",
+    "@mailroom/mcp": "workspace:*",
+    "@modelcontextprotocol/sdk": "^1.32.2",
     "hono": "^4.13.16",
     "postal-mime": "^2.7.5",
     "yaml": "^2.9.0",

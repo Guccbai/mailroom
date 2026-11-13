@@ -2,6 +2,7 @@ import type { Context } from 'hono'
 
 export type WorkerVariables = {
   requestId: string
+  actor: 'api' | 'web'
 }
 
 export type WorkerApp = {

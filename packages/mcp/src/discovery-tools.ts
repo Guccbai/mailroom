@@ -1,8 +1,8 @@
 import {
+  type ApiResponse,
   describeOperation,
   listOperations,
   MAILROOM_OPERATION_CATEGORIES,
-  type MailroomClient,
 } from '@mailroom/core'
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import * as z from 'zod/v4'
@@ -10,7 +10,13 @@ import { apiToolResult, errorToolResult } from './tool-result.js'
 
 const openOutputSchema = z.looseObject({})
 
-export type MailroomApi = Pick<MailroomClient, 'runOperation'>
+/** Any client that runs one operation and returns the shared API envelope. */
+export type MailroomApi = {
+  runOperation(
+    id: string,
+    params?: Record<string, unknown>,
+  ): Promise<ApiResponse>
+}
 
 export function registerDiscoveryTools(
   server: Pick<McpServer, 'registerTool'>,

@@ -7,6 +7,12 @@ import {
 } from '@mailroom/core'
 import { Hono } from 'hono'
 import { bodyLimit } from 'hono/body-limit'
+import { createMiddleware } from 'hono/factory'
+import {
+  attachmentResponse,
+  findAttachment,
+  verifyDownloadSignature,
+} from './attachments.js'
 import { requestContext, requireApiToken } from './auth.js'
 import { receiveGmailSentEmail } from './gmail-sent-ingress.js'
 import { handleInboundEmail } from './inbound-handler.js'
@@ -14,14 +20,146 @@ import {
   consumeInboundQueue,
   sweepPendingInbound,
 } from './inbound-processing.js'
+import { authorizePage, authorizeSubmit, MCP_PATH, mcpFetch } from './oauth.js'
 import { executeOperation } from './operation-executor.js'
 import { receiveRelayEmail } from './relay-ingress.js'
 import { failure, success } from './responses.js'
 import type { WorkerApp } from './types.js'
+import { serveWebAsset, WEB_ASSET_PATHS } from './web-assets.js'
+import {
+  checkPassword,
+  clearedSessionCookie,
+  createSessionValue,
+  pruneAuthFailures,
+  readCookie,
+  SESSION_COOKIE,
+  sameOriginRequest,
+  sessionCookie,
+  verifySessionValue,
+  webPasswordConfigured,
+} from './web-auth.js'
 
 const app = new Hono<WorkerApp>()
 
+/** Attachments with base64 content need more room than other operations. */
+const LARGE_BODY_OPERATIONS = new Set(['drafts.create', 'drafts.compose'])
+const LARGE_BODY_BYTES = 16 * 1024 * 1024
+const DEFAULT_BODY_BYTES = 1024 * 1024
+
+const tooLarge = (
+  context: Parameters<Parameters<typeof bodyLimit>[0]['onError'] & {}>[0],
+) =>
+  context.json(
+    {
+      ok: false,
+      error: {
+        code: 'INVALID_INPUT',
+        message: 'The request body is too large.',
+      },
+    },
+    413,
+  )
+
+const operationBodyLimit = createMiddleware<WorkerApp>(async (context, next) =>
+  bodyLimit({
+    maxSize: LARGE_BODY_OPERATIONS.has(context.req.param('id') ?? '')
+      ? LARGE_BODY_BYTES
+      : DEFAULT_BODY_BYTES,
+    onError: tooLarge,
+  })(context, next),
+)
+
 app.use('*', requestContext)
+
+for (const path of WEB_ASSET_PATHS) {
+  app.get(path, (context) =>
+    serveWebAsset(path, context.req.header('if-none-match')),
+  )
+}
+
+app.get('/authorize', (context) =>
+  authorizePage(context.req.raw, context.env, defaultHandler),
+)
+app.post('/authorize', (context) =>
+  authorizeSubmit(context.req.raw, context.env, defaultHandler),
+)
+
+app.get('/v1/session', async (context) =>
+  context.json({
+    ok: true,
+    data: {
+      authenticated: await verifySessionValue(
+        context.env,
+        readCookie(context.req.header('cookie') ?? null, SESSION_COOKIE),
+      ),
+      passwordConfigured: webPasswordConfigured(context.env),
+    },
+  }),
+)
+
+app.post(
+  '/v1/session',
+  bodyLimit({ maxSize: 8 * 1024, onError: tooLarge }),
+  async (context) => {
+    try {
+      if (!sameOriginRequest(context.req.raw)) {
+        throw new MailroomError(
+          'FORBIDDEN',
+          'Cross-origin sign-in is not allowed.',
+        )
+      }
+      const payload = await context.req
+        .json<{ password?: unknown }>()
+        .catch(() => ({}) as { password?: unknown })
+      await checkPassword(
+        context.env,
+        context.req.raw,
+        typeof payload.password === 'string' ? payload.password : '',
+      )
+      context.header(
+        'set-cookie',
+        sessionCookie(await createSessionValue(context.env)),
+      )
+      return success(context, { authenticated: true })
+    } catch (error) {
+      return failure(context, error)
+    }
+  },
+)
+
+app.delete('/v1/session', (context) => {
+  context.header('set-cookie', clearedSessionCookie())
+  return context.json({ ok: true, data: { authenticated: false } })
+})
+
+app.get(
+  '/v1/attachments/:id/download',
+  createMiddleware<WorkerApp>(async (context, next) => {
+    const id = context.req.param('id') ?? ''
+    if (
+      await verifyDownloadSignature(
+        context.env,
+        id,
+        context.req.query('expires'),
+        context.req.query('signature'),
+      )
+    ) {
+      const attachment = await findAttachment(context.env.DB, id)
+      if (!attachment) {
+        return failure(
+          context,
+          new MailroomError('NOT_FOUND', 'Attachment not found.'),
+        )
+      }
+      return attachmentResponse(
+        context.env.RAW,
+        attachment,
+        context.req.query('inline') === '1',
+      )
+    }
+    await next()
+  }),
+)
 app.get('/health', (context) =>
   context.json({
     ok: true,
@@ -57,23 +195,26 @@ app.post('/v1/ingress/gmail-sent', async (context) => {
 })
 
 app.use('/v1/*', requireApiToken)
-app.use(
-  '/v1/operations/*',
-  bodyLimit({
-    maxSize: 1024 * 1024,
-    onError: (context) =>
-      context.json(
-        {
-          ok: false,
-          error: {
-            code: 'INVALID_INPUT',
-            message: 'The request body is too large.',
-          },
-        },
-        413,
-      ),
-  }),
-)
+app.use('/v1/operations/:id', operationBodyLimit)
+
+app.get('/v1/attachments/:id/download', async (context) => {
+  try {
+    const attachment = await findAttachment(
+      context.env.DB,
+      context.req.param('id'),
+    )
+    if (!attachment) {
+      throw new MailroomError('NOT_FOUND', 'Attachment not found.')
+    }
+    return await attachmentResponse(
+      context.env.RAW,
+      attachment,
+      context.req.query('inline') === '1',
+    )
+  } catch (error) {
+    return failure(context, error)
+  }
+})
 
 app.get('/v1/operations', (context) => {
   try {
@@ -136,8 +277,31 @@ app.notFound((context) =>
 
 app.onError((error, context) => failure(context, error))
 
+const defaultHandler = {
+  fetch: (request: Request, env: Env, executionCtx: ExecutionContext) =>
+    app.fetch(request, env, executionCtx),
+}
+
+function usesOAuthProvider(pathname: string): boolean {
+  return (
+    pathname === MCP_PATH ||
+    pathname.startsWith(`${MCP_PATH}/`) ||
+    pathname.startsWith('/oauth/') ||
+    pathname.startsWith('/.well-known/oauth-')
+  )
+}
+
 export default {
-  fetch: app.fetch,
+  async fetch(
+    request: Request,
+    env: Env,
+    executionCtx: ExecutionContext,
+  ): Promise<Response> {
+    if (usesOAuthProvider(new URL(request.url).pathname)) {
+      return mcpFetch(request, env, executionCtx, defaultHandler)
+    }
+    return app.fetch(request, env, executionCtx)
+  },
   async email(
     message: ForwardableEmailMessage,
     env: Env,
@@ -157,6 +321,8 @@ export default {
     env: Env,
     executionCtx: ExecutionContext,
   ): Promise<void> {
-    executionCtx.waitUntil(sweepPendingInbound(env))
+    executionCtx.waitUntil(
+      Promise.all([sweepPendingInbound(env), pruneAuthFailures(env.DB)]),
+    )
   },
 } satisfies ExportedHandler<Env>

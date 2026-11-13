@@ -4,7 +4,8 @@
     "RAW": "R2 bucket",
     "AI": "Workers AI",
     "AI_SEARCH": "AI Search instance",
-    "EMAIL": "Email Service send binding"
+    "EMAIL": "Email Service send binding",
+    "OAUTH_KV": "KV namespace for MCP OAuth clients and tokens"
   },
   "requiredSecrets": [
     "MAILROOM_API_TOKEN",
@@ -17,11 +18,19 @@
     "MAILROOM_FORWARD_TO_BY_DOMAIN",
     "TELEGRAM_BOT_TOKEN",
     "TELEGRAM_CHAT_ID",
-    "TELEGRAM_NOTIFY_MAILBOXES"
+    "TELEGRAM_NOTIFY_MAILBOXES",
+    "MAILROOM_WEB_PASSWORD",
+    "MAILROOM_MCP_TOKEN",
+    "MAILROOM_PUBLIC_URL",
+    "WEBHOOK_URL",
+    "WEBHOOK_SECRET",
+    "WEBHOOK_EVENTS",
+    "WEBHOOK_NOTIFY_MAILBOXES"
   ],
   "variables": {
     "ENVIRONMENT": "production",
     "AI_MODEL": "@cf/meta/llama-3.1-8b-instruct-fast",
-    "MAX_EMAIL_BYTES": "26214400"
+    "MAX_EMAIL_BYTES": "26214400",
+    "MAILROOM_SEND_MODE": "live"
   }
 }

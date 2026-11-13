@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { allowedFromDomain, relayInbound } from './index.js'
+import { allowedFromDomain, emailBuilder, relayInbound } from './index.js'
 
 describe('outbound domain allowlist', () => {
   it('requires an exact normalized domain match', () => {
@@ -101,5 +101,29 @@ describe('inbound relay', () => {
     )
 
     expect(forward).not.toHaveBeenCalled()
+  })
+})
+
+describe('outbound relay message', () => {
+  it('forwards several recipients, Cc, and attachments to Email Service', () => {
+    const builder = emailBuilder({
+      from: 'hello@example.com',
+      to: ['a@example.org', 'b@example.org'],
+      cc: ['c@example.org'],
+      subject: 'Files',
+      text: 'Attached',
+      attachments: [
+        {
+          filename: 'a.txt',
+          contentType: 'text/plain',
+          contentBase64: btoa('abc'),
+        },
+      ],
+    }) as EmailMessageBuilder & { cc?: string[] }
+    expect(builder.to).toEqual(['a@example.org', 'b@example.org'])
+    expect(builder.cc).toEqual(['c@example.org'])
+    expect(
+      new TextDecoder().decode(builder.attachments?.[0]?.content as Uint8Array),
+    ).toBe('abc')
   })
 })

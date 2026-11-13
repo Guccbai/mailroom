@@ -20,7 +20,8 @@
   "vars": {
     "ENVIRONMENT": "production",
     "AI_MODEL": "@cf/meta/llama-3.1-8b-instruct-fast",
-    "MAX_EMAIL_BYTES": "26214400"
+    "MAX_EMAIL_BYTES": "26214400",
+    "MAILROOM_SEND_MODE": "live"
   },
   "d1_databases": [
     {
@@ -28,6 +29,12 @@
       "database_name": "mailroom",
       "database_id": "replace-with-d1-database-id",
       "migrations_dir": "../../migrations"
+    }
+  ],
+  "kv_namespaces": [
+    {
+      "binding": "OAUTH_KV",
+      "id": "replace-with-kv-namespace-id"
     }
   ],
   "r2_buckets": [

@@ -28,7 +28,16 @@ export function allowedFromDomain(
     .includes(domain ?? '')
 }
 
-function emailBuilder(
+function base64ToBytes(value: string): Uint8Array {
+  const binary = atob(value)
+  const bytes = new Uint8Array(binary.length)
+  for (let index = 0; index < binary.length; index += 1) {
+    bytes[index] = binary.charCodeAt(index)
+  }
+  return bytes
+}
+
+export function emailBuilder(
   message: ReturnType<typeof outboundMessageSchema.parse>,
 ): EmailMessageBuilder {
   const headers: Record<string, string> = {}
@@ -41,15 +50,29 @@ function emailBuilder(
     to: message.to,
     subject: message.subject,
     text: message.text,
+    ...(message.cc?.length ? { cc: message.cc } : {}),
     ...(message.replyTo ? { replyTo: message.replyTo } : {}),
     ...(message.html ? { html: message.html } : {}),
     ...(Object.keys(headers).length ? { headers } : {}),
+    ...(message.attachments?.length
+      ? {
+          attachments: message.attachments.map((attachment) => ({
+            disposition: 'attachment' as const,
+            filename: attachment.filename,
+            type: attachment.contentType,
+            content: base64ToBytes(attachment.contentBase64),
+          })),
+        }
+      : {}),
   }
 }
 
+/** Room for 10 MB of attachments encoded as base64 inside JSON. */
+export const MAX_SEND_BODY_BYTES = 16 * 1024 * 1024
+
 async function send(request: Request, env: Env): Promise<Response> {
   const body = await request.arrayBuffer()
-  if (!body.byteLength || body.byteLength > 1024 * 1024) {
+  if (!body.byteLength || body.byteLength > MAX_SEND_BODY_BYTES) {
     return json({ ok: false, error: { message: 'Invalid body size.' } }, 400)
   }
   const bodySha256 = request.headers.get('x-mailroom-body-sha256') ?? ''

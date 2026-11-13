@@ -1,5 +1,9 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { notifyTelegram, telegramMailboxEnabled } from './telegram.js'
+import {
+  notifyTelegram,
+  telegramMailboxEnabled,
+  telegramText,
+} from './telegram.js'
 
 describe('Telegram notification mailbox selection', () => {
   afterEach(() => {
@@ -75,5 +79,49 @@ describe('Telegram notification mailbox selection', () => {
     )
 
     expect(fetch).toHaveBeenCalledOnce()
+  })
+
+  it('accepts "*" for every mailbox', () => {
+    expect(telegramMailboxEnabled('any@example.com', '["*"]')).toBe(true)
+  })
+
+  it('reports a failed Telegram request without throwing', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => undefined)
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(new Response('bad chat', { status: 400 })),
+    )
+    const result = await notifyTelegram(
+      {
+        TELEGRAM_BOT_TOKEN: 'bot-token',
+        TELEGRAM_CHAT_ID: 'chat-id',
+        TELEGRAM_NOTIFY_MAILBOXES: '["*"]',
+      } as Env,
+      {
+        id: 'msg_test',
+        from: 'sender@example.net',
+        to: 'alerts@example.com',
+        subject: 'Test',
+        preview: 'Hello',
+      },
+    )
+    expect(result).toMatchObject({ state: 'failed', statusCode: 400 })
+  })
+})
+
+describe('Telegram message text', () => {
+  it('lists attachments and links to the web app', () => {
+    const text = telegramText({
+      id: 'msg_1',
+      from: 'a@example.net',
+      to: 'hello@example.com',
+      subject: '',
+      preview: 'Body',
+      attachments: [{ filename: 'a.pdf' }, { filename: null }],
+      link: 'https://mail.example.com/#/message/msg_1',
+    })
+    expect(text).toContain('Subject: (no subject)')
+    expect(text).toContain('Attachments: a.pdf, unnamed file')
+    expect(text).toContain('Open: https://mail.example.com/#/message/msg_1')
   })
 })
