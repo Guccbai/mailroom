@@ -29,7 +29,7 @@ Mailroom receives email through Cloudflare and exposes bounded tools for reading
 
 Project email tends to end up in a personal inbox, a shared login, or a service that gives automation far too much access. Mailroom gives the mail one private home and exposes small, named operations instead of an open-ended inbox and send button.
 
-It is built for people who own their domains, are comfortable running Cloudflare infrastructure, and want to use project email from a terminal or local agent. There is no hosted Mailroom account and no web inbox.
+It is built for people who own their domains, are comfortable running Cloudflare infrastructure, and want to use project email from a browser, a terminal, or an agent. There is no hosted Mailroom account. Each deployment has one owner.
 
 ## What Mailroom gives you
 
@@ -38,7 +38,10 @@ It is built for people who own their domains, are comfortable running Cloudflare
 - Threads, messages, drafts, approvals, and delivery history stored in D1.
 - Search through Cloudflare AI Search with a D1 full-text fallback.
 - One CLI for normal use and a typed API for scripts.
-- Three compact MCP tools that discover and run the same operations.
+- Three compact MCP tools that discover and run the same operations, locally over stdio or remotely at `/mcp` with OAuth or a bearer token.
+- A private web app for reading, searching, composing, and approving drafts.
+- Attachments on replies and new emails, stored in R2.
+- Telegram alerts and signed webhooks for new and sent mail.
 - A hard boundary between creating a draft, approving it, and sending it.
 - Optional Gmail forwarding and Sent-mail synchronization.
 - A signed relay for domains owned by another Cloudflare account.
@@ -233,7 +236,7 @@ The shipped configuration does not allow it. Draft creation, approval, and deliv
 
 ### Does Mailroom replace Gmail?
 
-It can, but it does not have a web inbox. Gmail can remain the human interface while Mailroom keeps the original mail, routing state, search index, agent operations, and audit history.
+It can. The web app covers reading, searching, replying, and new mail for one owner. Gmail can also remain the human interface while Mailroom keeps the original mail, routing state, search index, agent operations, and audit history. The [web app and remote MCP guide](docs/web-and-mcp.md) covers setup.
 
 ### Why does Mailroom need a Worker?
 
