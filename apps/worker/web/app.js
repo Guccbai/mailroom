@@ -1,16 +1,45 @@
 // Mailroom web app entry: routing and start-up. Plain browser modules, no build step.
 
 import { composePane, draftPane, draftsListPane } from './drafts.js'
+import './keys.js'
 import { placeholder, renderLogin, renderNoPassword, shell } from './layout.js'
-import { ApiError, api, app, h, parseRoute, request, state } from './lib.js'
-import { messageListPane, refreshCounts, threadPane } from './mail.js'
+import {
+  ApiError,
+  api,
+  app,
+  applyTheme,
+  h,
+  lazyPane,
+  mark,
+  parseRoute,
+  readPref,
+  request,
+  state,
+} from './lib.js'
+import { messageListPane, refreshCounts } from './mail.js'
 import { settingsPane } from './settings.js'
+import { threadPane } from './thread.js'
+
+applyTheme()
 
 /* ---------- app ---------- */
 
 export async function loadInboxes() {
-  const result = await api('inboxes.list', { limit: 100 })
-  state.inboxes = result.items.filter((inbox) => inbox.enabled !== false)
+  const [inboxes, domains] = await Promise.all([
+    api('inboxes.list', { limit: 100 }),
+    api('domains.list', { limit: 100 }),
+  ])
+  state.inboxes = inboxes.items
+    .filter((inbox) => inbox.enabled !== false)
+    .sort((a, b) => a.address.localeCompare(b.address))
+  state.domains = domains.items.sort((a, b) => a.domain.localeCompare(b.domain))
+  if (state.box && !state.inboxes.some((inbox) => inbox.id === state.box))
+    state.box = ''
+  if (
+    state.domain &&
+    !state.domains.some((domain) => domain.id === state.domain)
+  )
+    state.domain = ''
 }
 
 export const TITLES = {
@@ -35,37 +64,44 @@ export async function route() {
     return
   }
   if (name === 'compose') {
-    shell('compose', null, await composePane(), { wide: true })
+    shell('compose', null, lazyPane('read-pane', composePane), { wide: true })
     return
   }
   if (name === 'settings') {
-    shell('settings', null, await settingsPane(), { wide: true })
+    shell(
+      'settings',
+      null,
+      lazyPane('read-pane', () => settingsPane(current.id ?? 'overview')),
+      { wide: true },
+    )
     return
   }
   if (name === 'drafts' || name === 'draft') {
-    const [list, read] = await Promise.all([
-      draftsListPane(current.id),
+    shell(
+      'drafts',
+      lazyPane('list-pane', () => draftsListPane(current.id)),
       current.id
-        ? draftPane(current.id)
-        : Promise.resolve(placeholder('选择一份草稿查看')),
-    ])
-    shell('drafts', list, read, { reading: Boolean(current.id) })
+        ? lazyPane('read-pane', () => draftPane(current.id))
+        : placeholder('选择一份草稿查看'),
+      { reading: Boolean(current.id) },
+    )
     return
   }
   if (name === 'thread' && current.id) {
     const from = current.params.get('from') || 'inbox'
     const listName = TITLES[from] ? from : 'inbox'
-    const [list, read] = await Promise.all([
+    shell(
+      listName,
       messageListPane(listName, TITLES[listName], current.id),
       threadPane(current.id),
-    ])
-    shell(listName, list, read, { reading: true })
+      { reading: true },
+    )
     return
   }
   const listName = TITLES[name] ? name : 'inbox'
   shell(
     listName,
-    await messageListPane(listName, TITLES[listName]),
+    messageListPane(listName, TITLES[listName]),
     placeholder('选择一封邮件阅读'),
   )
 }
@@ -80,8 +116,15 @@ export async function start() {
     renderLogin()
     return
   }
-  await Promise.all([loadInboxes(), refreshCounts()])
+  const [box = '', domain = ''] = readPref('scope', '|').split('|')
+  state.box = box
+  state.domain = domain
+  state.collapsed = new Set(
+    readPref('collapsed', '').split(',').filter(Boolean),
+  )
+  await loadInboxes()
   await route()
+  refreshCounts()
 }
 
 start().catch((error) => {
@@ -93,8 +136,14 @@ start().catch((error) => {
       h(
         'div',
         { class: 'login-card' },
+        mark(),
         h('h1', {}, '加载失败'),
         h('p', { class: 'error' }, error.message),
+        h(
+          'button',
+          { class: 'btn primary', onclick: () => location.reload() },
+          '重新加载',
+        ),
       ),
     ),
   )

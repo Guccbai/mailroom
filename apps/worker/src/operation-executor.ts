@@ -1,4 +1,8 @@
-import { MailroomError, parseOperationInput } from '@mailroom/core'
+import {
+  MailroomError,
+  operationIsOwnerOnly,
+  parseOperationInput,
+} from '@mailroom/core'
 import { getAttachment } from './operations/attachments.js'
 import {
   listAutomations,
@@ -15,6 +19,7 @@ import {
   rejectDraft,
   sendDraft,
 } from './operations/drafts.js'
+import { forwardDraft } from './operations/forward.js'
 import {
   getMessage,
   getThread,
@@ -26,6 +31,13 @@ import {
   notificationsStatus,
   notificationsTest,
 } from './operations/notifications.js'
+import {
+  settingsGet,
+  settingsUpdate,
+  tokensCreate,
+  tokensList,
+  tokensRevoke,
+} from './operations/settings.js'
 import {
   deleteRoute,
   listDomains,
@@ -61,12 +73,18 @@ const handlers: Record<string, Handler> = {
   'drafts.get': getDraft,
   'drafts.create': createDraft,
   'drafts.compose': composeDraft,
+  'drafts.forward': forwardDraft,
   'drafts.approve': approveDraft,
   'drafts.reject': rejectDraft,
   'drafts.send': sendDraft,
   'attachments.get': getAttachment,
   'notifications.status': notificationsStatus,
   'notifications.test': notificationsTest,
+  'settings.get': settingsGet,
+  'settings.update': settingsUpdate,
+  'tokens.list': tokensList,
+  'tokens.create': tokensCreate,
+  'tokens.revoke': tokensRevoke,
   'automation.list': (_context) => listAutomations(),
   'automation.test': testAutomation,
   'prompts.list': (_context, input) => promptsList(input),
@@ -79,6 +97,17 @@ export async function executeOperation(
   rawInput: unknown,
 ): Promise<unknown> {
   const input = parseOperationInput(id, rawInput)
+  if (
+    operationIsOwnerOnly(id) &&
+    context.actor !== undefined &&
+    context.actor !== 'api' &&
+    context.actor !== 'web'
+  ) {
+    throw new MailroomError(
+      'FORBIDDEN',
+      `${id} can only be run by the owner from the web app or with the API token.`,
+    )
+  }
   const handler = handlers[id]
   if (!handler) {
     throw new MailroomError(

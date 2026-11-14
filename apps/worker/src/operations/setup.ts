@@ -10,7 +10,10 @@ import type { OperationContext } from '../types.js'
 
 type Input = Record<string, unknown>
 
-function pageClause(input: Input): {
+function pageClause(
+  input: Input,
+  alias = '',
+): {
   sql: string
   values: unknown[]
   limit: number
@@ -18,7 +21,9 @@ function pageClause(input: Input): {
   const limit = input.limit as number
   const cursor = cursorFrom(input.cursor)
   return {
-    sql: cursor ? ' AND (created_at < ? OR (created_at = ? AND id < ?))' : '',
+    sql: cursor
+      ? ` AND (${alias}created_at < ? OR (${alias}created_at = ? AND ${alias}id < ?))`
+      : '',
     values: cursor ? [cursor.at, cursor.at, cursor.id] : [],
     limit,
   }
@@ -120,7 +125,7 @@ export async function listInboxes(
   context: OperationContext,
   input: Input,
 ): Promise<unknown> {
-  const page = pageClause(input)
+  const page = pageClause(input, 'i.')
   const domain = optionalString(input, 'domain')
   const result = await context.env.DB.prepare(
     `SELECT i.*, d.domain FROM inboxes i
@@ -134,6 +139,7 @@ export async function listInboxes(
   return {
     items: rows.map((row) => ({
       id: row.id,
+      domainId: row.domain_id,
       domain: row.domain,
       address: `${row.local_part}@${row.domain}`,
       localPart: row.local_part,
@@ -207,7 +213,7 @@ export async function listRoutes(
 ): Promise<unknown> {
   const domain = optionalString(input, 'domain')
   const inboxId = optionalString(input, 'inboxId')
-  const page = pageClause(input)
+  const page = pageClause(input, 'r.')
   const result = await context.env.DB.prepare(
     `SELECT r.*, d.domain FROM routes r
     JOIN domains d ON d.id = r.domain_id

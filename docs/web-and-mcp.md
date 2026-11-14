@@ -45,6 +45,48 @@ before anything is sent. Use the save-as-draft button (存为草稿) to stop bef
 Drafts that an agent or automation created appear in the drafts view (草稿与审批). Open one to
 approve and send it, approve it only, or reject it with a reason.
 
+To forward a message, open it and choose 转发 (or press `f`). Mailroom
+creates a new draft with the original quoted below your note and, unless you
+untick it, the original attachments. It is sent only after the same
+confirmation as any other draft. Agents use the `drafts.forward` operation.
+
+### Keyboard shortcuts
+
+Press `?` in the web app for the full list. The main ones are `c` compose,
+`/` search, `j` and `k` move through the list, `Enter` opens, `r` reply,
+`f` forward, `e` archive, `#` spam, `u` back, and `g` then `i`, `s`, `d` or
+`,` to jump to the inbox, sent mail, drafts or settings.
+
+### Manage settings in the web app
+
+Settings (设置) has sections for domains and mailbox addresses, notifications,
+forwarding, MCP clients and access tokens, and appearance.
+
+- **Domains and addresses:** add a domain, add addresses under it (each new
+  address gets an exact route), choose where mail for unlisted addresses
+  goes, and pause or resume a domain, an address or its route. Cloudflare
+  Email Routing still has to send the domain's mail to the Worker, and a new
+  sending address has to be allowed in the Worker's `send_email` binding.
+- **Notifications and forwarding:** the values listed in
+  [stored settings](#stored-settings) can be set here instead of as Worker
+  variables.
+- **Appearance:** light, dark, or the system setting. The sidebar groups
+  addresses by domain and filters the lists by domain or address.
+
+#### Stored settings
+
+These keys can be stored in D1 from the web app or with the `settings.update`
+operation. A stored value overrides the Worker variable of the same name.
+Clearing it falls back to the Worker variable:
+
+`MAILROOM_PUBLIC_URL`, `MAILROOM_FORWARD_TO`, `MAILROOM_FORWARD_TO_BY_DOMAIN`,
+`TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`, `TELEGRAM_NOTIFY_MAILBOXES`,
+`WEBHOOK_URL`, `WEBHOOK_SECRET`, `WEBHOOK_EVENTS`, `WEBHOOK_NOTIFY_MAILBOXES`.
+
+`settings.get` never returns `TELEGRAM_BOT_TOKEN` or `WEBHOOK_SECRET`; it only
+says whether they are set. `MAILROOM_API_TOKEN`, `MAILROOM_WEB_PASSWORD`,
+`INGRESS_SECRET` and the other credentials stay Worker secrets.
+
 ## Connect an MCP client over HTTPS
 
 The Worker serves the same three MCP tools as `mailroom mcp serve` at `/mcp`,
@@ -54,12 +96,22 @@ using the Streamable HTTP transport:
 - `mailroom_describe_operation`
 - `mailroom_run_operation`
 
-Clients can authenticate in two ways.
+OAuth is the recommended way to connect. Access tokens and static bearer
+tokens are optional, for clients that do not support OAuth.
 
 ### Use OAuth
 
-Clients that support MCP OAuth, such as Claude on the web, register
-themselves through `/oauth/register`. When you connect, Mailroom shows a
+With Claude Code:
+
+```sh
+claude mcp add --transport http mailroom https://mail.example.com/mcp
+```
+
+Then run `/mcp` in Claude Code, select `mailroom` and choose Authenticate. In
+Claude on the web or desktop, add a custom connector with the same URL. Other
+clients that support remote MCP with OAuth take the same URL.
+
+Clients register themselves through `/oauth/register`. When you connect, Mailroom shows a
 consent page with the client name and the address it will return to. Enter
 your web password to approve. Tokens last one hour and refresh for up to 30
 days.
@@ -76,9 +128,19 @@ Set `MAILROOM_PUBLIC_URL` to the Worker's public origin, such as
 `https://mail.example.com`, when the Worker has a custom domain. Mailroom uses
 it as the OAuth resource identifier and in notification links.
 
-### Use a bearer token
+### Use an access token
 
-Clients that accept custom headers can send a static token:
+For a client or script without OAuth, create an access token in Settings →
+MCP 与令牌. The token starts with `mrt_` and is shown once. Only its SHA-256
+hash is stored, and you can revoke it there at any time. Send it as
+`Authorization: Bearer mrt_…` to `/mcp` or `/v1/operations`.
+
+Access tokens and MCP clients cannot run `settings.update` or the `tokens.*`
+operations. Those need the web session or `MAILROOM_API_TOKEN`.
+
+### Use a static bearer token
+
+Clients that accept custom headers can also send a static token:
 
 ```sh
 claude mcp add --transport http mailroom https://mail.example.com/mcp \

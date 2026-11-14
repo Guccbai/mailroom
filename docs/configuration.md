@@ -89,6 +89,10 @@ before sending attachments.
 | `WEBHOOK_EVENTS` | No | Nobody | Comma-separated events. Defaults to `message.received` |
 | `WEBHOOK_NOTIFY_MAILBOXES` | No | Nobody | JSON array of mailbox addresses. Defaults to every mailbox |
 
+The notification, forwarding and public URL values above can also be stored
+from the web app instead; a stored value wins. See
+[stored settings](web-and-mcp.md#stored-settings).
+
 Use a different random value for each authentication boundary. Do not reuse a
 Cloudflare API token for a Mailroom secret.
 
