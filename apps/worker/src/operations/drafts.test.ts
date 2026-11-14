@@ -113,6 +113,9 @@ describe('sendDraft', () => {
       rfc_message_id: '<original@example.net>',
       message_references: '[]',
       inbox_id: 'inb_test',
+      sending_inbox_id: 'inb_test',
+      to_addresses: '["reader@example.net"]',
+      cc_addresses: '[]',
       relay_url: null,
     }
     const db = {
@@ -124,6 +127,7 @@ describe('sendDraft', () => {
               values,
               first: async () =>
                 sql.includes('FROM outbound_attempts') ? null : draft,
+              all: async () => ({ results: [] }),
               run: async () => ({ success: true }),
             }
           },

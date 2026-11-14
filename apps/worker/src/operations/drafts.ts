@@ -1,9 +1,19 @@
 import {
+  type AttachmentInput,
   MailroomError,
   normalizeMessageId,
   normalizeSubject,
+  plainTextPreview,
 } from '@mailroom/core'
 import { addressParser } from 'postal-mime'
+import {
+  deleteStoredAttachments,
+  draftAttachmentStatements,
+  loadDraftAttachments,
+  readAttachmentBase64,
+  signedDownloadPath,
+  storeDraftAttachments,
+} from '../attachments.js'
 import {
   batchOrThrow,
   cursorFor,
@@ -14,7 +24,13 @@ import {
   parseJson,
 } from '../database.js'
 import { emailAddresses } from '../email-addresses.js'
-import { inputNumber, inputString, optionalString } from '../operation-input.js'
+import { notifyMessage } from '../notifications.js'
+import {
+  inputNumber,
+  inputString,
+  inputStrings,
+  optionalString,
+} from '../operation-input.js'
 import { sendOutbound } from '../outbound.js'
 import { indexMessage } from '../search.js'
 import type { OperationContext } from '../types.js'
@@ -30,13 +46,23 @@ export function draftRecipient(message: Row): string {
   return String(message.sender)
 }
 
+function draftTo(row: Row): string[] {
+  const to = parseJson<string[]>(row.to_addresses, [])
+  return to.length ? to : [String(row.recipient)]
+}
+
 function draftSummary(row: Row): Record<string, unknown> {
   return {
     id: row.id,
+    kind: row.kind ?? 'reply',
     messageId: row.message_id,
     threadId: row.thread_id,
+    inboxId: row.inbox_id,
     status: row.status,
     recipient: row.recipient,
+    to: draftTo(row),
+    cc: parseJson<string[]>(row.cc_addresses, []),
+    attachmentCount: Number(row.attachment_count ?? 0),
     subject: row.subject,
     source: row.source,
     createdAt: row.created_at,
@@ -103,8 +129,18 @@ export async function getDraft(
   )
     .bind(id)
     .all<Row>()
+  const attachments = await loadDraftAttachments(context.env.DB, id)
   return {
     ...draftSummary(draft),
+    attachments: await Promise.all(
+      attachments.map(async (attachment) => ({
+        id: attachment.id,
+        filename: attachment.filename,
+        contentType: attachment.contentType,
+        sizeBytes: attachment.sizeBytes,
+        download: await signedDownloadPath(context.env, attachment.id),
+      })),
+    ),
     sender: draft.sender,
     replyTo: draft.reply_to,
     text: draft.text_body,
@@ -121,6 +157,88 @@ export async function getDraft(
       note: event.note,
       createdAt: event.created_at,
     })),
+  }
+}
+
+function attachmentInputs(input: Input): AttachmentInput[] {
+  return Array.isArray(input.attachments)
+    ? (input.attachments as AttachmentInput[])
+    : []
+}
+
+type NewDraft = {
+  id: string
+  kind: 'reply' | 'new'
+  messageId: string | null
+  threadId: string | null
+  inboxId: string
+  to: string[]
+  cc: string[]
+  sender: string
+  replyTo: string | null
+  subject: string
+  text: string
+  html: string | null
+  source: string
+  promptId?: string | null
+  promptHash?: string | null
+  model?: string | null
+}
+
+async function insertDraft(
+  context: OperationContext,
+  draft: NewDraft,
+  attachments: AttachmentInput[],
+): Promise<void> {
+  const stored = await storeDraftAttachments(
+    context.env.RAW,
+    draft.id,
+    attachments,
+  )
+  const now = nowIso()
+  try {
+    await batchOrThrow(context.env.DB, [
+      context.env.DB.prepare(
+        `INSERT INTO drafts (
+          id, message_id, thread_id, inbox_id, kind, status, recipient,
+          to_addresses, cc_addresses, sender, reply_to, subject, text_body,
+          html_body, attachment_count, validation, source, prompt_id,
+          prompt_hash, model, created_at, updated_at
+        ) VALUES (
+          ?, ?, ?, ?, ?, 'pending', ?, ?, ?, ?, ?, ?, ?, ?, ?, '{}', ?, ?, ?, ?, ?, ?
+        )`,
+      ).bind(
+        draft.id,
+        draft.messageId,
+        draft.threadId,
+        draft.inboxId,
+        draft.kind,
+        draft.to[0],
+        JSON.stringify(draft.to),
+        JSON.stringify(draft.cc),
+        draft.sender,
+        draft.replyTo,
+        draft.subject,
+        draft.text,
+        draft.html,
+        stored.length,
+        draft.source,
+        draft.promptId ?? null,
+        draft.promptHash ?? null,
+        draft.model ?? null,
+        now,
+        now,
+      ),
+      ...draftAttachmentStatements(context.env.DB, draft.id, stored),
+      context.env.DB.prepare(
+        `INSERT INTO draft_events
+          (id, draft_id, action, actor, note, created_at)
+        VALUES (?, ?, 'created', ?, ?, ?)`,
+      ).bind(newId('evt'), draft.id, draft.source, null, now),
+    ])
+  } catch (error) {
+    await deleteStoredAttachments(context.env.RAW, stored)
+    throw error
   }
 }
 
@@ -157,44 +275,123 @@ export async function createDraft(
       ? originalSubject
       : `Re: ${originalSubject || '(no subject)'}`)
   const id = newId('drf')
-  const now = nowIso()
-  await batchOrThrow(context.env.DB, [
-    context.env.DB.prepare(
-      `INSERT INTO drafts (
-        id, message_id, thread_id, status, recipient, sender, reply_to,
-        subject, text_body, html_body, validation, source,
-        prompt_id, prompt_hash, model, created_at, updated_at
-      ) VALUES (?, ?, ?, 'pending', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    ).bind(
+  const attachments = attachmentInputs(input)
+  const cc = inputStrings(input, 'cc')
+  await insertDraft(
+    context,
+    {
       id,
-      sourceMessageId,
-      sourceMessage.thread_id,
-      recipient,
+      kind: 'reply',
+      messageId: sourceMessageId,
+      threadId: String(sourceMessage.thread_id),
+      inboxId: String(sourceMessage.inbox_id),
+      to: [recipient],
+      cc,
       sender,
-      sourceMessage.reply_to,
+      replyTo: (sourceMessage.reply_to as string | null) ?? null,
       subject,
       text,
-      optionalString(input, 'html') ?? null,
-      '{}',
-      inputString(input, 'source'),
-      optionalString(input, 'promptId') ?? null,
-      optionalString(input, 'promptHash') ?? null,
-      optionalString(input, 'model') ?? null,
-      now,
-      now,
-    ),
-    context.env.DB.prepare(
-      `INSERT INTO draft_events
-        (id, draft_id, action, actor, note, created_at)
-      VALUES (?, ?, 'created', ?, ?, ?)`,
-    ).bind(newId('evt'), id, inputString(input, 'source'), null, now),
-  ])
+      html: optionalString(input, 'html') ?? null,
+      source: inputString(input, 'source'),
+      promptId: optionalString(input, 'promptId') ?? null,
+      promptHash: optionalString(input, 'promptHash') ?? null,
+      model: optionalString(input, 'model') ?? null,
+    },
+    attachments,
+  )
   return {
     id,
     status: 'pending',
     recipient,
+    cc,
     sender,
     subject,
+    attachmentCount: attachments.length,
+  }
+}
+
+async function resolveComposeInbox(
+  context: OperationContext,
+  input: Input,
+): Promise<{ inboxId: string; sender: string; replyTo: string | null }> {
+  const inboxId = optionalString(input, 'inboxId')
+  const from = optionalString(input, 'from')?.toLowerCase()
+  const row = inboxId
+    ? await context.env.DB.prepare(
+        `SELECT i.id, i.local_part, i.enabled, d.domain, d.from_address,
+          d.reply_to, d.enabled AS domain_enabled
+        FROM inboxes i JOIN domains d ON d.id = i.domain_id WHERE i.id = ?`,
+      )
+        .bind(inboxId)
+        .first<Row>()
+    : await context.env.DB.prepare(
+        `SELECT i.id, i.local_part, i.enabled, d.domain, d.from_address,
+          d.reply_to, d.enabled AS domain_enabled
+        FROM inboxes i JOIN domains d ON d.id = i.domain_id
+        WHERE (i.local_part || '@' || d.domain) = ?
+          OR lower(coalesce(d.from_address, '')) = ?
+        ORDER BY (i.local_part || '@' || d.domain) = ? DESC
+        LIMIT 1`,
+      )
+        .bind(from, from, from)
+        .first<Row>()
+  if (!row) {
+    throw new MailroomError(
+      'NOT_FOUND',
+      inboxId
+        ? `Inbox ${inboxId} was not found.`
+        : `No configured inbox can send as ${from}.`,
+    )
+  }
+  if (row.enabled !== 1 || row.domain_enabled !== 1) {
+    throw new MailroomError('CONFLICT', 'The sending inbox is disabled.')
+  }
+  const inboxAddress = `${row.local_part}@${row.domain}`
+  return {
+    inboxId: String(row.id),
+    sender: from ?? inboxAddress,
+    replyTo: (row.reply_to as string | null) ?? null,
+  }
+}
+
+export async function composeDraft(
+  context: OperationContext,
+  input: Input,
+): Promise<unknown> {
+  const inbox = await resolveComposeInbox(context, input)
+  const id = newId('drf')
+  const to = inputStrings(input, 'to')
+  const cc = inputStrings(input, 'cc')
+  const subject = inputString(input, 'subject')
+  const attachments = attachmentInputs(input)
+  await insertDraft(
+    context,
+    {
+      id,
+      kind: 'new',
+      messageId: null,
+      threadId: null,
+      inboxId: inbox.inboxId,
+      to,
+      cc,
+      sender: inbox.sender,
+      replyTo: inbox.replyTo,
+      subject,
+      text: inputString(input, 'text'),
+      html: optionalString(input, 'html') ?? null,
+      source: inputString(input, 'source'),
+    },
+    attachments,
+  )
+  return {
+    id,
+    kind: 'new',
+    status: 'pending',
+    to,
+    cc,
+    sender: inbox.sender,
+    subject,
+    attachmentCount: attachments.length,
   }
 }
 
@@ -290,10 +487,10 @@ export async function sendDraft(
   }
   const draft = await context.env.DB.prepare(
     `SELECT d.*, m.rfc_message_id, m.message_references,
-      m.inbox_id, dom.relay_url
+      coalesce(d.inbox_id, m.inbox_id) AS sending_inbox_id, dom.relay_url
     FROM drafts d
-    JOIN messages m ON m.id = d.message_id
-    JOIN inboxes i ON i.id = m.inbox_id
+    LEFT JOIN messages m ON m.id = d.message_id
+    JOIN inboxes i ON i.id = coalesce(d.inbox_id, m.inbox_id)
     JOIN domains dom ON dom.id = i.domain_id
     WHERE d.id = ?`,
   )
@@ -329,30 +526,64 @@ export async function sendDraft(
   try {
     const references = parseJson<string[]>(draft.message_references, [])
     if (draft.rfc_message_id) references.push(String(draft.rfc_message_id))
+    const to = draftTo(draft)
+    const cc = parseJson<string[]>(draft.cc_addresses, [])
+    const inboxId = String(draft.sending_inbox_id)
+    const storedAttachments = await loadDraftAttachments(context.env.DB, id)
+    const attachments = await Promise.all(
+      storedAttachments.map(async (attachment) => ({
+        filename: attachment.filename,
+        contentType: attachment.contentType,
+        contentBase64: await readAttachmentBase64(
+          context.env.RAW,
+          attachment.key,
+        ),
+      })),
+    )
     const sent = await sendOutbound(
       context.env,
       {
         from: String(draft.sender),
-        to: String(draft.recipient),
+        to: to.length === 1 ? String(to[0]) : to,
+        ...(cc.length ? { cc } : {}),
         replyTo: draft.reply_to ? String(draft.reply_to) : null,
         subject: String(draft.subject),
         text: String(draft.text_body),
         html: draft.html_body ? String(draft.html_body) : null,
         inReplyTo: draft.rfc_message_id ? String(draft.rfc_message_id) : null,
         references,
+        ...(attachments.length ? { attachments } : {}),
       },
       draft.relay_url ? String(draft.relay_url) : null,
       idempotencyKey,
     )
     const sentAt = nowIso()
     const messageId = newId('msg')
+    const threadId = draft.thread_id ? String(draft.thread_id) : newId('thr')
     const rfcMessageId = normalizeMessageId(sent.messageId)
+    const subject = String(draft.subject)
+    const text = String(draft.text_body)
+    const preview = plainTextPreview(text || subject)
+    const outboundAttachments = storedAttachments.map((attachment) => ({
+      ...attachment,
+      messageAttachmentId: newId('att'),
+    }))
     await batchOrThrow(context.env.DB, [
-      markPriorInboundMessagesRead(
-        context.env.DB,
-        String(draft.thread_id),
-        sentAt,
-      ),
+      draft.thread_id
+        ? markPriorInboundMessagesRead(context.env.DB, threadId, sentAt)
+        : context.env.DB.prepare(
+            `INSERT INTO threads
+              (id, inbox_id, normalized_subject, latest_at, message_count,
+                created_at, updated_at)
+            VALUES (?, ?, ?, ?, 0, ?, ?)`,
+          ).bind(
+            threadId,
+            inboxId,
+            normalizeSubject(subject),
+            sentAt,
+            sentAt,
+            sentAt,
+          ),
       context.env.DB.prepare(
         `INSERT INTO messages (
           id, thread_id, inbox_id, direction, status, rfc_message_id,
@@ -361,47 +592,61 @@ export async function sendDraft(
           size_bytes, attachment_count, search_status, provider_message_id,
           received_at, created_at
         ) VALUES (
-          ?, ?, ?, 'outbound', 'read', ?, ?, ?, ?, ?, '[]', ?, ?, ?, ?, ?,
-          NULL, NULL, ?, 0, 'pending', ?, ?, ?
+          ?, ?, ?, 'outbound', 'read', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+          NULL, NULL, ?, ?, 'pending', ?, ?, ?
         )`,
       ).bind(
         messageId,
-        draft.thread_id,
-        draft.inbox_id,
+        threadId,
+        inboxId,
         rfcMessageId,
-        draft.rfc_message_id,
+        draft.rfc_message_id ?? null,
         JSON.stringify(references),
         draft.sender,
-        JSON.stringify([draft.recipient]),
-        draft.subject,
-        normalizeSubject(String(draft.subject)),
-        String(draft.text_body).slice(0, 240),
-        draft.text_body,
-        draft.html_body,
-        new TextEncoder().encode(String(draft.text_body)).byteLength,
+        JSON.stringify(to),
+        JSON.stringify(cc),
+        subject,
+        normalizeSubject(subject),
+        preview,
+        text,
+        draft.html_body ?? null,
+        new TextEncoder().encode(text).byteLength +
+          storedAttachments.reduce((sum, item) => sum + item.sizeBytes, 0),
+        storedAttachments.length,
         sent.messageId,
         sentAt,
         sentAt,
+      ),
+      ...outboundAttachments.map((attachment) =>
+        context.env.DB.prepare(
+          `INSERT INTO attachments
+            (id, message_id, filename, content_type, content_id, disposition,
+              size_bytes, r2_key, created_at)
+          VALUES (?, ?, ?, ?, NULL, 'attachment', ?, ?, ?)`,
+        ).bind(
+          attachment.messageAttachmentId,
+          messageId,
+          attachment.filename,
+          attachment.contentType,
+          attachment.sizeBytes,
+          attachment.key,
+          sentAt,
+        ),
       ),
       context.env.DB.prepare(
         `INSERT INTO message_fts
           (message_id, inbox_id, subject, sender, body, classification)
         VALUES (?, ?, ?, ?, ?, '')`,
-      ).bind(
-        messageId,
-        draft.inbox_id,
-        draft.subject,
-        draft.sender,
-        draft.text_body,
-      ),
+      ).bind(messageId, inboxId, subject, draft.sender, text),
       context.env.DB.prepare(
         `UPDATE threads SET latest_at = ?, message_count = message_count + 1,
           updated_at = ? WHERE id = ?`,
-      ).bind(sentAt, sentAt, draft.thread_id),
+      ).bind(sentAt, sentAt, threadId),
       context.env.DB.prepare(
         `UPDATE drafts SET status = 'sent', provider_message_id = ?,
-          sent_at = ?, updated_at = ?, last_error = NULL WHERE id = ?`,
-      ).bind(sent.messageId, sentAt, sentAt, id),
+          thread_id = ?, sent_at = ?, updated_at = ?, last_error = NULL
+        WHERE id = ?`,
+      ).bind(sent.messageId, threadId, sentAt, sentAt, id),
       context.env.DB.prepare(
         `UPDATE outbound_attempts SET state = 'sent', provider_message_id = ?,
           updated_at = ? WHERE id = ?`,
@@ -413,24 +658,47 @@ export async function sendDraft(
       ).bind(newId('evt'), id, sent.messageId, sentAt),
     ])
     context.executionCtx.waitUntil(
-      indexMessage(context.env, {
-        id: messageId,
-        threadId: String(draft.thread_id),
-        inboxId: String(draft.inbox_id),
-        mailbox: String(draft.sender),
-        direction: 'outbound',
-        from: String(draft.sender),
-        to: [String(draft.recipient)],
-        cc: [],
-        subject: String(draft.subject),
-        text: String(draft.text_body),
-        receivedAt: sentAt,
-        status: 'read',
-      }),
+      Promise.all([
+        indexMessage(context.env, {
+          id: messageId,
+          threadId,
+          inboxId,
+          mailbox: String(draft.sender),
+          direction: 'outbound',
+          from: String(draft.sender),
+          to,
+          cc,
+          subject,
+          text,
+          receivedAt: sentAt,
+          status: 'read',
+        }),
+        notifyMessage(context.env, 'message.sent', {
+          id: messageId,
+          threadId,
+          inboxId,
+          mailbox: String(draft.sender),
+          direction: 'outbound',
+          from: String(draft.sender),
+          to,
+          cc,
+          subject,
+          preview,
+          receivedAt: sentAt,
+          attachments: outboundAttachments.map((attachment) => ({
+            id: attachment.messageAttachmentId,
+            filename: attachment.filename,
+            contentType: attachment.contentType,
+            sizeBytes: attachment.sizeBytes,
+          })),
+        }),
+      ]).then(() => undefined),
     )
     return {
       id,
       status: 'sent',
+      messageId,
+      threadId,
       providerMessageId: sent.messageId,
       sentAt,
     }

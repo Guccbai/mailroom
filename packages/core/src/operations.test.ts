@@ -46,3 +46,60 @@ test('operation input applies defaults and rejects invalid values', () => {
     /Invalid operation parameters/,
   )
 })
+
+test('compose requires a sender and validates attachments', () => {
+  assert.throws(
+    () =>
+      parseOperationInput('drafts.compose', {
+        to: ['a@example.com'],
+        subject: 'Hi',
+        text: 'Hello',
+      }),
+    /Invalid operation parameters/,
+  )
+  const parsed = parseOperationInput('drafts.compose', {
+    from: 'Me@Example.com',
+    to: ['A@example.com'],
+    subject: 'Hi',
+    text: 'Hello',
+    attachments: [{ filename: 'a.txt', contentBase64: 'aGk=' }],
+  })
+  assert.equal(parsed.from, 'me@example.com')
+  assert.deepEqual(parsed.to, ['a@example.com'])
+  assert.deepEqual(parsed.attachments, [
+    {
+      filename: 'a.txt',
+      contentType: 'application/octet-stream',
+      contentBase64: 'aGk=',
+    },
+  ])
+  for (const attachment of [
+    { filename: 'a/b.txt', contentBase64: 'aGk=' },
+    { filename: 'a.txt', contentBase64: 'aGk' },
+    { filename: 'a.txt', contentType: 'not a type', contentBase64: 'aGk=' },
+  ]) {
+    assert.throws(
+      () =>
+        parseOperationInput('drafts.compose', {
+          from: 'me@example.com',
+          to: ['a@example.com'],
+          subject: 'Hi',
+          text: 'Hello',
+          attachments: [attachment],
+        }),
+      /Invalid operation parameters/,
+    )
+  }
+})
+
+test('new categories are discoverable', () => {
+  const ids = listOperations().map((item) => item.id)
+  for (const id of [
+    'attachments.get',
+    'drafts.compose',
+    'notifications.status',
+    'notifications.test',
+  ]) {
+    assert.ok(ids.includes(id), id)
+  }
+})

@@ -1,6 +1,7 @@
 import * as z from 'zod/v4'
 import { MailroomError } from './errors.js'
 import {
+  attachmentListSchema,
   domainNameSchema,
   draftStatusSchema,
   emailAddressSchema,
@@ -8,6 +9,7 @@ import {
   localPartSchema,
   messageStatusSchema,
   paginationSchema,
+  recipientListSchema,
   routeKindSchema,
 } from './schemas.js'
 
@@ -18,6 +20,8 @@ export const MAILROOM_OPERATION_CATEGORIES = [
   'routes',
   'messages',
   'drafts',
+  'attachments',
+  'notifications',
   'automation',
 ] as const
 
@@ -255,6 +259,7 @@ const definitions: readonly OperationDefinition[] = [
       inboxId: idSchema.optional(),
       threadId: idSchema.optional(),
       status: messageStatusSchema.optional(),
+      statuses: z.array(messageStatusSchema).min(1).max(4).optional(),
       direction: z.enum(['inbound', 'outbound']).optional(),
       sender: emailAddressSchema.optional(),
       since: z.string().datetime().optional(),
@@ -393,7 +398,8 @@ const definitions: readonly OperationDefinition[] = [
     id: 'drafts.create',
     category: 'drafts',
     name: 'Create a draft',
-    description: 'Prepare a reply without sending it',
+    description:
+      'Prepare a reply, with optional Cc and attachments, without sending it',
     useWhen: ['A human or agent has enough thread context to propose a reply'],
     avoidWhen: ['The source message or recipient is unknown'],
     outcome: 'Stores a pending draft for review and later approval.',
@@ -407,6 +413,8 @@ const definitions: readonly OperationDefinition[] = [
     inputSchema: z.object({
       messageId: idSchema,
       subject: z.string().trim().min(1).max(998).optional(),
+      cc: recipientListSchema.optional(),
+      attachments: attachmentListSchema.optional(),
       text: z.string().trim().min(1).max(250_000),
       html: z.string().trim().max(500_000).optional(),
       source: z.enum(['manual', 'automation', 'agent']).default('manual'),
@@ -417,6 +425,42 @@ const definitions: readonly OperationDefinition[] = [
         .optional(),
       model: z.string().trim().min(1).max(200).optional(),
     }),
+  }),
+  operation({
+    id: 'drafts.compose',
+    category: 'drafts',
+    name: 'Compose a new email',
+    description: 'Prepare a new email that does not reply to a stored message',
+    useWhen: [
+      'Starting a new conversation from a configured mailbox',
+      'Sending a file to someone who has not written first',
+    ],
+    avoidWhen: ['Replying to a stored message; use drafts.create'],
+    outcome:
+      'Stores a pending draft. Approval and sending remain separate steps.',
+    related: ['inboxes.list', 'drafts.get', 'drafts.approve', 'drafts.send'],
+    safety: {
+      readOnly: false,
+      destructive: false,
+      idempotent: false,
+      requiresApproval: false,
+    },
+    inputSchema: z
+      .object({
+        inboxId: idSchema.optional(),
+        from: emailAddressSchema.optional(),
+        to: recipientListSchema.min(1),
+        cc: recipientListSchema.optional(),
+        subject: z.string().trim().min(1).max(998),
+        text: z.string().trim().min(1).max(250_000),
+        html: z.string().trim().max(500_000).optional(),
+        attachments: attachmentListSchema.optional(),
+        source: z.enum(['manual', 'automation', 'agent']).default('manual'),
+      })
+      .refine((value) => Boolean(value.inboxId ?? value.from), {
+        message: 'Provide inboxId or from.',
+        path: ['inboxId'],
+      }),
   }),
   operation({
     id: 'drafts.approve',
@@ -479,6 +523,69 @@ const definitions: readonly OperationDefinition[] = [
     inputSchema: z.object({
       id: idSchema,
       idempotencyKey: z.string().trim().min(16).max(200),
+    }),
+  }),
+  operation({
+    id: 'attachments.get',
+    category: 'attachments',
+    name: 'Get an attachment',
+    description:
+      'Read attachment metadata, a short-lived download path, and optional content',
+    useWhen: ['A message lists an attachment the task needs'],
+    avoidWhen: ['Only the attachment names are needed; use messages.get'],
+    outcome:
+      'Returns metadata and a download path valid for 15 minutes. Content is returned only for small files when requested.',
+    related: ['messages.get', 'drafts.create', 'drafts.compose'],
+    safety: {
+      readOnly: true,
+      destructive: false,
+      idempotent: true,
+      requiresApproval: false,
+    },
+    inputSchema: z.object({
+      id: idSchema,
+      includeContent: z.boolean().default(false),
+    }),
+  }),
+  operation({
+    id: 'notifications.status',
+    category: 'notifications',
+    name: 'Notification status',
+    description:
+      'Show Telegram and webhook configuration and recent deliveries',
+    useWhen: ['Checking whether new-mail notifications are configured'],
+    avoidWhen: ['Reading mailbox content'],
+    outcome:
+      'Returns enabled channels, filters, and recent delivery results without secrets.',
+    related: ['notifications.test', 'system.status'],
+    safety: {
+      readOnly: true,
+      destructive: false,
+      idempotent: true,
+      requiresApproval: false,
+    },
+    inputSchema: z.object({
+      limit: z.coerce.number().int().min(1).max(50).default(10),
+    }),
+  }),
+  operation({
+    id: 'notifications.test',
+    category: 'notifications',
+    name: 'Send a test notification',
+    description: 'Send one sample event to Telegram, the webhook, or both',
+    useWhen: ['Verifying a new Telegram chat or webhook endpoint'],
+    avoidWhen: ['Notifying about a real message'],
+    outcome:
+      'Delivers a sample message.received event and returns each delivery result.',
+    related: ['notifications.status'],
+    safety: {
+      readOnly: false,
+      destructive: false,
+      idempotent: false,
+      requiresApproval: false,
+    },
+    inputSchema: z.object({
+      channel: z.enum(['telegram', 'webhook', 'all']).default('all'),
     }),
   }),
   operation({

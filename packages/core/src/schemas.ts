@@ -130,14 +130,81 @@ export type ApiError = z.infer<typeof apiErrorSchema>
 export const apiResponseSchema = z.union([apiSuccessSchema, apiErrorSchema])
 export type ApiResponse = z.infer<typeof apiResponseSchema>
 
+export const MAX_ATTACHMENTS = 10
+export const MAX_ATTACHMENT_BYTES = 10 * 1024 * 1024
+export const MAX_TOTAL_ATTACHMENT_BYTES = 10 * 1024 * 1024
+const MAX_ATTACHMENT_BASE64_LENGTH = Math.ceil(MAX_ATTACHMENT_BYTES / 3) * 4
+
+export const attachmentFilenameSchema = z
+  .string()
+  .trim()
+  .min(1)
+  .max(255)
+  .refine(
+    (value) =>
+      ![...value].some((character) => {
+        const code = character.charCodeAt(0)
+        return (
+          character === '/' || character === '\\' || code < 32 || code === 127
+        )
+      }),
+    'Filenames cannot contain slashes or control characters.',
+  )
+
+export const contentTypeSchema = z
+  .string()
+  .trim()
+  .toLowerCase()
+  .max(255)
+  .regex(/^[a-z0-9][a-z0-9!#$&^_.+-]*\/[a-z0-9][a-z0-9!#$&^_.+-]*$/)
+
+export const base64Schema = z
+  .string()
+  .trim()
+  .min(1)
+  .max(MAX_ATTACHMENT_BASE64_LENGTH)
+  .regex(/^[A-Za-z0-9+/]+={0,2}$/, 'Content must be standard base64.')
+  .refine((value) => value.length % 4 === 0, 'Base64 length is invalid.')
+
+export const attachmentInputSchema = z.object({
+  filename: attachmentFilenameSchema,
+  contentType: contentTypeSchema.default('application/octet-stream'),
+  contentBase64: base64Schema,
+})
+export type AttachmentInput = z.infer<typeof attachmentInputSchema>
+
+export const attachmentListSchema = z
+  .array(attachmentInputSchema)
+  .max(MAX_ATTACHMENTS)
+
+export const recipientListSchema = z.array(emailAddressSchema).max(50)
+
+export const outboundAttachmentSchema = z.object({
+  filename: attachmentFilenameSchema,
+  contentType: contentTypeSchema,
+  contentBase64: base64Schema,
+})
+export type OutboundAttachment = z.infer<typeof outboundAttachmentSchema>
+
 export const outboundMessageSchema = z.object({
   from: emailAddressSchema,
-  to: emailAddressSchema,
+  to: z.union([emailAddressSchema, z.array(emailAddressSchema).min(1).max(50)]),
+  cc: recipientListSchema.optional(),
   replyTo: emailAddressSchema.nullable().optional(),
   subject: z.string().trim().min(1).max(998),
   text: z.string().max(250_000),
   html: z.string().max(500_000).nullable().optional(),
   inReplyTo: z.string().trim().max(998).nullable().optional(),
   references: z.array(z.string().trim().max(998)).max(100).optional(),
+  attachments: z
+    .array(outboundAttachmentSchema)
+    .max(MAX_ATTACHMENTS)
+    .optional(),
 })
 export type OutboundMessage = z.infer<typeof outboundMessageSchema>
+
+/** Decoded byte length of a validated base64 string. */
+export function base64ByteLength(value: string): number {
+  const padding = value.endsWith('==') ? 2 : value.endsWith('=') ? 1 : 0
+  return (value.length / 4) * 3 - padding
+}

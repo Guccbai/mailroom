@@ -1,6 +1,9 @@
 import { MAILROOM_VERSION } from '@mailroom/core'
+import { sendMode } from '../outbound.js'
 import { telegramNotificationMailboxes } from '../telegram.js'
 import type { OperationContext } from '../types.js'
+import { webPasswordConfigured } from '../web-auth.js'
+import { webhookUrl } from '../webhook.js'
 
 export async function systemStatus(
   context: OperationContext,
@@ -25,6 +28,17 @@ export async function systemStatus(
           telegramNotificationMailboxes(context.env.TELEGRAM_NOTIFY_MAILBOXES)
             .length,
       ),
+      webhook: Boolean(
+        webhookUrl(context.env) &&
+          (context.env.WEBHOOK_SECRET?.length ?? 0) >= 16,
+      ),
+      oauth: Boolean(context.env.OAUTH_KV),
+    },
+    sending: { mode: sendMode(context.env) },
+    web: { passwordConfigured: webPasswordConfigured(context.env) },
+    mcp: {
+      path: '/mcp',
+      dedicatedToken: Boolean(context.env.MAILROOM_MCP_TOKEN),
     },
     automation: {
       model: context.env.AI_MODEL,

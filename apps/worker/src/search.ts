@@ -20,6 +20,7 @@ export async function indexMessage(
   env: Env,
   message: IndexableMessage,
 ): Promise<void> {
+  if (!env.AI_SEARCH) return
   const document = createMessageSearchDocument(message)
   try {
     await env.AI_SEARCH.items.upload(`messages/${message.id}.md`, document, {

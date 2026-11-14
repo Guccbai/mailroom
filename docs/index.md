@@ -1,8 +1,7 @@
 # Mailroom documentation
 
-Mailroom is a self-hosted Cloudflare email service with a CLI and a small MCP
-surface. It stores email for people and agents. It does not provide a web
-inbox.
+Mailroom is a self-hosted Cloudflare email service with a CLI, a private web
+app, and a small MCP surface. It stores email for one owner and their agents.
 
 Start with the deployment guide if this is your first installation. Do not
 switch a working domain's MX records until the safe migration guide says to.
@@ -12,9 +11,10 @@ switch a working domain's MX records until the safe migration guide says to.
 1. [Deploy the central Worker](deploy.md).
 2. [Review every binding, variable, and secret](configuration.md).
 3. Connect the CLI and create the Mailroom domain, inbox, and route records.
-4. [Connect Gmail](gmail.md) if Gmail will be the human inbox.
-5. [Run the acceptance tests](testing.md).
-6. [Move an existing mail domain safely](migration.md).
+4. [Turn on the web app, remote MCP, and notifications](web-and-mcp.md).
+5. [Connect Gmail](gmail.md) if Gmail will be the human inbox.
+6. [Run the acceptance tests](testing.md).
+7. [Move an existing mail domain safely](migration.md).
 
 The [troubleshooting guide](troubleshooting.md) covers Worker, Cloudflare,
 Gmail SMTP, Apps Script, routing, and synchronization failures.
@@ -35,6 +35,7 @@ mailbox state.
 | --- | --- |
 | [Deploy Mailroom](deploy.md) | Creating the Cloudflare resources and first Worker |
 | [Configure Mailroom](configuration.md) | Checking bindings, variables, secrets, and credentials |
+| [Use the web app and remote MCP](web-and-mcp.md) | Reading and sending in a browser, connecting MCP clients over HTTPS, attachments, Telegram, and webhooks |
 | [Use Gmail](gmail.md) | Forwarding inbound mail, sending through Cloudflare SMTP, and syncing Sent mail |
 | [Test an installation](testing.md) | Proving storage, routing, search, Gmail, threading, and failure handling |
 | [Move a working domain](migration.md) | Replacing another provider's MX records without losing the rollback path |

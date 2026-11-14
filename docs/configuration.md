@@ -41,6 +41,7 @@ account.
 | `AI_SEARCH` | AI Search instance | Yes | Compact semantic and hybrid message retrieval |
 | `AI` | Workers AI | Yes | Optional classification and drafting |
 | `EMAIL` | Email Service send binding | Yes for replies | Outbound delivery from approved addresses |
+| `OAUTH_KV` | KV namespace | Yes | MCP OAuth clients, grants, and tokens |
 
 Keep `EMAIL.allowed_sender_addresses` narrow. Add only addresses Mailroom may
 send from. Every sender domain must be onboarded in Email Sending on the same
@@ -60,6 +61,7 @@ they differ from the public defaults.
 | `ENVIRONMENT` | `production` | Returned by system status and stored with service context |
 | `AI_MODEL` | `@cf/meta/llama-3.1-8b-instruct-fast` | Model used by optional automation tests |
 | `MAX_EMAIL_BYTES` | `26214400` | Maximum inbound or imported MIME accepted by Mailroom |
+| `MAILROOM_SEND_MODE` | `live` | `dry-run` records sends without delivering them. Use it only for test deployments |
 
 Cloudflare Email Sending currently has a smaller outbound message limit than
 Mailroom's inbound limit. Check the
@@ -78,7 +80,14 @@ before sending attachments.
 | `INGRESS_SECRETS_BY_DOMAIN` | Only for relays that use separate secrets | Nobody | JSON map from email domains to relay secrets; domains not listed use `INGRESS_SECRET` |
 | `TELEGRAM_BOT_TOKEN` | Only for Telegram | Telegram | Sends accepted-message notifications |
 | `TELEGRAM_CHAT_ID` | Only for Telegram | Telegram | Selects the notification chat |
-| `TELEGRAM_NOTIFY_MAILBOXES` | Only for Telegram | Nobody | JSON array of exact mailbox addresses that may trigger notifications |
+| `TELEGRAM_NOTIFY_MAILBOXES` | Only for Telegram | Nobody | JSON array of exact mailbox addresses that may trigger notifications, or `["*"]` for every mailbox |
+| `MAILROOM_WEB_PASSWORD` | Only for the web app and MCP OAuth | Nobody | Owner password, at least 12 characters |
+| `MAILROOM_MCP_TOKEN` | No | MCP clients that use a bearer token | Authenticates `/mcp`. Falls back to `MAILROOM_API_TOKEN` when absent |
+| `MAILROOM_PUBLIC_URL` | No | Nobody | Public origin used for OAuth and notification links |
+| `WEBHOOK_URL` | Only for webhooks | Webhook receiver | `https` endpoint for event deliveries |
+| `WEBHOOK_SECRET` | Only for webhooks | Webhook receiver | Signs each delivery. At least 16 characters |
+| `WEBHOOK_EVENTS` | No | Nobody | Comma-separated events. Defaults to `message.received` |
+| `WEBHOOK_NOTIFY_MAILBOXES` | No | Nobody | JSON array of mailbox addresses. Defaults to every mailbox |
 
 Use a different random value for each authentication boundary. Do not reuse a
 Cloudflare API token for a Mailroom secret.
@@ -101,6 +110,10 @@ Set `TELEGRAM_NOTIFY_MAILBOXES` to an explicit list of mailbox addresses:
 
 Use `[]` or remove any one of the Telegram secrets to disable all Telegram
 notifications. The allowlist matches exact addresses without case sensitivity.
+Use `["*"]` to notify for every mailbox.
+
+The [web app and remote MCP guide](web-and-mcp.md) covers the web password,
+MCP tokens, and webhook signatures.
 
 ## Cross-account ingress secrets
 

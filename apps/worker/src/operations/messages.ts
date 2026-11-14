@@ -1,9 +1,11 @@
 import { MailroomError } from '@mailroom/core'
+import { signedDownloadPath } from '../attachments.js'
 import { cursorFor, cursorFrom, parseJson } from '../database.js'
 import {
   inputBoolean,
   inputNumber,
   inputString,
+  inputStrings,
   optionalString,
 } from '../operation-input.js'
 import { hybridSearch, indexMessage } from '../search.js'
@@ -60,6 +62,11 @@ export async function listMessages(
       clauses.push(`${column} = ?`)
       values.push(value)
     }
+  }
+  const statuses = inputStrings(input, 'statuses')
+  if (statuses.length) {
+    clauses.push(`status IN (${statuses.map(() => '?').join(', ')})`)
+    values.push(...statuses)
   }
   const since = optionalString(input, 'since')
   if (since) {
@@ -127,14 +134,20 @@ export async function getMessage(
     ...(includeHeaders ? { headers: parseJson(row.headers, {}) } : {}),
     ...(includeAttachments
       ? {
-          attachments: attachments.map((attachment) => ({
-            id: attachment.id,
-            filename: attachment.filename,
-            contentType: attachment.content_type,
-            contentId: attachment.content_id,
-            disposition: attachment.disposition,
-            sizeBytes: attachment.size_bytes,
-          })),
+          attachments: await Promise.all(
+            attachments.map(async (attachment) => ({
+              id: attachment.id,
+              filename: attachment.filename,
+              contentType: attachment.content_type,
+              contentId: attachment.content_id,
+              disposition: attachment.disposition,
+              sizeBytes: attachment.size_bytes,
+              download: await signedDownloadPath(
+                context.env,
+                String(attachment.id),
+              ),
+            })),
+          ),
         }
       : {}),
   }
@@ -155,11 +168,46 @@ export async function getThread(
   if (!result.results.length) {
     throw new MailroomError('NOT_FOUND', `Thread ${threadId} was not found.`)
   }
+  const includeBodies = inputBoolean(input, 'includeBodies')
+  const withAttachments = result.results.filter(
+    (row) => Number(row.attachment_count) > 0,
+  )
+  const attachmentsByMessage = new Map<string, Row[]>()
+  if (includeBodies && withAttachments.length) {
+    const ids = withAttachments.map((row) => String(row.id))
+    const attachments = await context.env.DB.prepare(
+      `SELECT id, message_id, filename, content_type, size_bytes
+      FROM attachments WHERE message_id IN (${ids.map(() => '?').join(', ')})
+      ORDER BY created_at, id`,
+    )
+      .bind(...ids)
+      .all<Row>()
+    for (const attachment of attachments.results) {
+      const key = String(attachment.message_id)
+      attachmentsByMessage.set(key, [
+        ...(attachmentsByMessage.get(key) ?? []),
+        attachment,
+      ])
+    }
+  }
   return {
     threadId,
-    messages: result.results
-      .reverse()
-      .map((row) => body(row, inputBoolean(input, 'includeBodies'))),
+    messages: result.results.reverse().map((row) => ({
+      ...body(row, includeBodies),
+      ...(includeBodies
+        ? {
+            cc: parseJson(row.cc, []),
+            attachments: (attachmentsByMessage.get(String(row.id)) ?? []).map(
+              (attachment) => ({
+                id: attachment.id,
+                filename: attachment.filename,
+                contentType: attachment.content_type,
+                sizeBytes: attachment.size_bytes,
+              }),
+            ),
+          }
+        : {}),
+    })),
   }
 }
 

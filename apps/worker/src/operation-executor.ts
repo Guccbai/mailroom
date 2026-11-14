@@ -1,4 +1,5 @@
 import { MailroomError, parseOperationInput } from '@mailroom/core'
+import { getAttachment } from './operations/attachments.js'
 import {
   listAutomations,
   promptGet,
@@ -7,6 +8,7 @@ import {
 } from './operations/automation.js'
 import {
   approveDraft,
+  composeDraft,
   createDraft,
   getDraft,
   listDrafts,
@@ -20,6 +22,10 @@ import {
   searchMessages,
   updateMessage,
 } from './operations/messages.js'
+import {
+  notificationsStatus,
+  notificationsTest,
+} from './operations/notifications.js'
 import {
   deleteRoute,
   listDomains,
@@ -54,9 +60,13 @@ const handlers: Record<string, Handler> = {
   'drafts.list': listDrafts,
   'drafts.get': getDraft,
   'drafts.create': createDraft,
+  'drafts.compose': composeDraft,
   'drafts.approve': approveDraft,
   'drafts.reject': rejectDraft,
   'drafts.send': sendDraft,
+  'attachments.get': getAttachment,
+  'notifications.status': notificationsStatus,
+  'notifications.test': notificationsTest,
   'automation.list': (_context) => listAutomations(),
   'automation.test': testAutomation,
   'prompts.list': (_context, input) => promptsList(input),

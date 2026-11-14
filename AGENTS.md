@@ -39,7 +39,11 @@ configured separately under `apps/`.
 - `packages/mcp`: a stdio MCP server exposing compact list, describe, and run
   tools.
 - `apps/worker`: central Email Service handler, private API, D1, R2, AI Search,
-  Telegram, and outbound mail.
+  Telegram and webhook notifications, outbound mail, the remote MCP endpoint at
+  `/mcp`, and the owner web app.
+- `apps/worker/web`: plain browser modules for the web app. Run
+  `pnpm --filter @mailroom/worker web:build` after editing them; a test fails
+  when `src/web-assets.generated.ts` is stale.
 - `apps/ingress`: small cross-account relay for signed inbound and outbound
   delivery.
 - `prompts`: versioned Markdown instructions used by optional automation.
@@ -114,7 +118,7 @@ coverage, and the `CLAUDE.md` symlink. Keep it in the lint gate.
 
 ## Agent and MCP rules
 
-The MCP server exposes only three tools:
+The stdio MCP server and the Worker's `/mcp` endpoint expose only three tools:
 
 - `mailroom_list_operations`
 - `mailroom_describe_operation`

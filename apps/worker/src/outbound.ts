@@ -1,18 +1,33 @@
 import { sha256Hex, signRelayRequest } from '@mailroom/core'
 import { relaySecretForAddress } from './relay-secrets.js'
+import { base64ToBytes } from './signing.js'
+
+export type OutboundAttachment = {
+  filename: string
+  contentType: string
+  contentBase64: string
+}
 
 export type OutboundMessage = {
   from: string
-  to: string
+  to: string | string[]
+  cc?: string[]
   replyTo?: string | null
   subject: string
   text: string
   html?: string | null
   inReplyTo?: string | null
   references?: string[]
+  attachments?: OutboundAttachment[]
 }
 
-function emailBuilder(message: OutboundMessage): EmailMessageBuilder {
+export function sendMode(
+  env: Pick<Env, 'MAILROOM_SEND_MODE'>,
+): 'live' | 'dry-run' {
+  return String(env.MAILROOM_SEND_MODE) === 'dry-run' ? 'dry-run' : 'live'
+}
+
+export function emailBuilder(message: OutboundMessage): EmailMessageBuilder {
   const headers: Record<string, string> = {}
   if (message.inReplyTo) headers['In-Reply-To'] = message.inReplyTo
   if (message.references?.length) {
@@ -23,9 +38,20 @@ function emailBuilder(message: OutboundMessage): EmailMessageBuilder {
     to: message.to,
     subject: message.subject,
     text: message.text,
+    ...(message.cc?.length ? { cc: message.cc } : {}),
     ...(message.replyTo ? { replyTo: message.replyTo } : {}),
     ...(message.html ? { html: message.html } : {}),
     ...(Object.keys(headers).length ? { headers } : {}),
+    ...(message.attachments?.length
+      ? {
+          attachments: message.attachments.map((attachment) => ({
+            disposition: 'attachment' as const,
+            filename: attachment.filename,
+            type: attachment.contentType,
+            content: base64ToBytes(attachment.contentBase64),
+          })),
+        }
+      : {}),
   }
 }
 
@@ -73,12 +99,23 @@ async function sendThroughRelay(
   return { messageId: payload.messageId }
 }
 
-export function sendOutbound(
+export async function sendOutbound(
   env: Env,
   message: OutboundMessage,
   relayUrl: string | null,
   idempotencyKey: string,
 ): Promise<EmailSendResult> {
+  if (sendMode(env) === 'dry-run') {
+    console.log('mailroom_send_dry_run', {
+      from: message.from,
+      recipients:
+        (Array.isArray(message.to) ? message.to.length : 1) +
+        (message.cc?.length ?? 0),
+      attachments: message.attachments?.length ?? 0,
+      transport: relayUrl ? 'relay' : 'email-service',
+    })
+    return { messageId: `<dry-run.${crypto.randomUUID()}@mailroom.invalid>` }
+  }
   return relayUrl
     ? sendThroughRelay(env, relayUrl, message, idempotencyKey)
     : env.EMAIL.send(emailBuilder(message))

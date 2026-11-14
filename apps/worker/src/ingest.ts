@@ -17,9 +17,9 @@ import {
   nowIso,
 } from './database.js'
 import { emailAddresses, firstEmailAddress } from './email-addresses.js'
+import { notifyMessage } from './notifications.js'
 import { requireInboundRoute } from './route-store.js'
 import { indexMessage } from './search.js'
-import { notifyTelegram } from './telegram.js'
 import type { WaitUntilContext } from './types.js'
 
 const MAX_TEXT_BODY = 750_000
@@ -382,12 +382,24 @@ export async function ingestEmail(
       }),
       ...(envelope.direction === 'inbound'
         ? [
-            notifyTelegram(env, {
+            notifyMessage(env, 'message.received', {
               id: messageId,
+              threadId,
+              inboxId: route.inboxId,
+              mailbox: envelope.to.toLowerCase(),
+              direction: 'inbound',
               from: sender,
-              to: envelope.to,
+              to: recipients,
+              cc,
               subject,
               preview,
+              receivedAt: at,
+              attachments: attachments.map((attachment) => ({
+                id: attachment.id,
+                filename: attachment.filename ?? null,
+                contentType: attachment.contentType ?? null,
+                sizeBytes: attachment.sizeBytes,
+              })),
             }),
           ]
         : []),

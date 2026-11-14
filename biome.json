@@ -15,7 +15,8 @@
       "!!**/*.yml",
       "!!**/*.config.ts",
       "!!**/*.config.mts",
-      "!!**/worker-configuration.d.ts"
+      "!!**/worker-configuration.d.ts",
+      "!!**/web-assets.generated.ts"
     ]
   },
   "linter": {

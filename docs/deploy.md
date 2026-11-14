@@ -82,14 +82,16 @@ pnpm --filter @mailroom/worker exec wrangler r2 bucket create mailroom-raw
 
 pnpm --filter @mailroom/worker exec wrangler queues create mailroom-ingest
 
+pnpm --filter @mailroom/worker exec wrangler kv namespace create mailroom-oauth
+
 pnpm --filter @mailroom/worker exec wrangler ai-search create mailroom \
   --type builtin \
   --hybrid-search \
   --custom-metadata-schema ../../config/ai-search-metadata.json
 ```
 
-Save the D1 database ID printed by Wrangler. R2 and AI Search use the names in
-the commands.
+Save the D1 database ID and the KV namespace ID printed by Wrangler. R2 and AI
+Search use the names in the commands.
 
 Mailroom uploads compact Markdown search documents through the AI Search Items
 binding. The original MIME remains in R2.
@@ -105,12 +107,13 @@ cp apps/worker/wrangler.jsonc apps/worker/wrangler.local.jsonc
 Edit `apps/worker/wrangler.local.jsonc`:
 
 1. Replace `replace-with-d1-database-id` with the new D1 ID.
-2. Confirm the R2 bucket is `mailroom-raw`.
-3. Confirm the Queue producer and consumer both use `mailroom-ingest`.
-4. Keep the five-minute cron under `triggers.crons`.
-5. Confirm the AI Search instance is `mailroom`.
-6. Replace `mailroom@example.com` under `allowed_sender_addresses`.
-7. Add every address Mailroom may send from and no others.
+2. Replace `replace-with-kv-namespace-id` with the new KV namespace ID.
+3. Confirm the R2 bucket is `mailroom-raw`.
+4. Confirm the Queue producer and consumer both use `mailroom-ingest`.
+5. Keep the five-minute cron under `triggers.crons`.
+6. Confirm the AI Search instance is `mailroom`.
+7. Replace `mailroom@example.com` under `allowed_sender_addresses`.
+8. Add every address Mailroom may send from and no others.
 
 The local configuration is ignored by Git. Run `git status --short` and confirm
 it does not appear before adding any real domain or address.
@@ -184,6 +187,9 @@ pnpm --filter @mailroom/worker exec wrangler secret put \
 
 Only set optional secrets that are in use. Empty values are harder to diagnose
 than absent optional features.
+
+The web app, remote MCP, and webhooks have their own secrets. The
+[web app and remote MCP guide](web-and-mcp.md) lists them.
 
 For `TELEGRAM_NOTIFY_MAILBOXES`, enter a JSON array containing only the exact
 mailbox addresses that should trigger notifications. Telegram stays off when
