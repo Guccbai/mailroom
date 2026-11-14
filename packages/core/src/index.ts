@@ -48,6 +48,7 @@ export {
   type OperationDefinition,
   type OperationDescription,
   type OperationSummary,
+  operationIsOwnerOnly,
   parseOperationInput,
 } from './operations.js'
 export {

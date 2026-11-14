@@ -13,6 +13,14 @@ const files = {
   '/mail.js': ['mail.js', 'text/javascript; charset=utf-8'],
   '/drafts.js': ['drafts.js', 'text/javascript; charset=utf-8'],
   '/settings.js': ['settings.js', 'text/javascript; charset=utf-8'],
+  '/settings-domains.js': [
+    'settings-domains.js',
+    'text/javascript; charset=utf-8',
+  ],
+  '/settings-mcp.js': ['settings-mcp.js', 'text/javascript; charset=utf-8'],
+  '/thread.js': ['thread.js', 'text/javascript; charset=utf-8'],
+  '/keys.js': ['keys.js', 'text/javascript; charset=utf-8'],
+  '/ui.css': ['ui.css', 'text/css; charset=utf-8'],
   '/app.css': ['app.css', 'text/css; charset=utf-8'],
   '/favicon.svg': ['favicon.svg', 'image/svg+xml'],
 }

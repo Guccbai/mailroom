@@ -166,7 +166,7 @@ function attachmentInputs(input: Input): AttachmentInput[] {
     : []
 }
 
-type NewDraft = {
+export type NewDraft = {
   id: string
   kind: 'reply' | 'new'
   messageId: string | null
@@ -185,7 +185,7 @@ type NewDraft = {
   model?: string | null
 }
 
-async function insertDraft(
+export async function insertDraft(
   context: OperationContext,
   draft: NewDraft,
   attachments: AttachmentInput[],
@@ -310,7 +310,7 @@ export async function createDraft(
   }
 }
 
-async function resolveComposeInbox(
+export async function resolveComposeInbox(
   context: OperationContext,
   input: Input,
 ): Promise<{ inboxId: string; sender: string; replyTo: string | null }> {

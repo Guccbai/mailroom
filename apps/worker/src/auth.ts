@@ -1,5 +1,6 @@
 import { verifyBearerToken } from '@mailroom/core'
 import { createMiddleware } from 'hono/factory'
+import { verifyAccessToken } from './access-tokens.js'
 import type { WorkerApp } from './types.js'
 import {
   readCookie,
@@ -32,14 +33,19 @@ export const requireApiToken = createMiddleware<WorkerApp>(
     if (value?.startsWith('Bearer ')) {
       const token = value.slice(7)
       if (
-        !token ||
-        !(await verifyBearerToken(token, context.env.MAILROOM_API_TOKEN))
+        token &&
+        (await verifyBearerToken(token, context.env.MAILROOM_API_TOKEN))
       ) {
-        return unauthorized('A valid Mailroom API token is required.')
+        context.set('actor', 'api')
+        await next()
+        return
       }
-      context.set('actor', 'api')
-      await next()
-      return
+      if (token && (await verifyAccessToken(context.env.DB, token))) {
+        context.set('actor', 'token')
+        await next()
+        return
+      }
+      return unauthorized('A valid Mailroom API token is required.')
     }
     const session = readCookie(
       context.req.header('cookie') ?? null,

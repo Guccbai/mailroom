@@ -63,6 +63,11 @@ export async function listMessages(
       values.push(value)
     }
   }
+  const domainId = optionalString(input, 'domainId')
+  if (domainId) {
+    clauses.push('inbox_id IN (SELECT id FROM inboxes WHERE domain_id = ?)')
+    values.push(domainId)
+  }
   const statuses = inputStrings(input, 'statuses')
   if (statuses.length) {
     clauses.push(`status IN (${statuses.map(() => '?').join(', ')})`)
@@ -247,7 +252,7 @@ async function fallbackSearch(
     values.push(classification)
   }
   const result = await context.env.DB.prepare(
-    `SELECT m.id, m.thread_id, m.subject, m.sender, m.preview, m.received_at,
+    `SELECT m.id, m.thread_id, m.inbox_id, m.subject, m.sender, m.preview, m.received_at,
       bm25(message_fts) AS rank,
       snippet(message_fts, 4, '', '', ' … ', 24) AS snippet
     FROM message_fts
@@ -260,6 +265,7 @@ async function fallbackSearch(
   return result.results.map((row) => ({
     messageId: row.id,
     threadId: row.thread_id,
+    inboxId: row.inbox_id,
     subject: row.subject,
     from: row.sender,
     receivedAt: row.received_at,

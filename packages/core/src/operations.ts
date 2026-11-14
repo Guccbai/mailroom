@@ -1,5 +1,11 @@
 import * as z from 'zod/v4'
 import { MailroomError } from './errors.js'
+import type {
+  OperationDefinition,
+  OperationDescription,
+  OperationSummary,
+} from './operation-types.js'
+import { settingsOperations } from './operations-settings.js'
 import {
   attachmentListSchema,
   domainNameSchema,
@@ -22,38 +28,18 @@ export const MAILROOM_OPERATION_CATEGORIES = [
   'drafts',
   'attachments',
   'notifications',
+  'settings',
   'automation',
 ] as const
 
 export type MailroomOperationCategory =
   (typeof MAILROOM_OPERATION_CATEGORIES)[number]
 
-type OperationSafety = {
-  readOnly: boolean
-  destructive: boolean
-  idempotent: boolean
-  requiresApproval: boolean
-}
-
-export type OperationSummary = {
-  id: string
-  category: MailroomOperationCategory
-  name: string
-  description: string
-  safety: OperationSafety
-}
-
-export type OperationDefinition = OperationSummary & {
-  useWhen: readonly string[]
-  avoidWhen: readonly string[]
-  outcome: string
-  related: readonly string[]
-  inputSchema: z.ZodObject
-}
-
-export type OperationDescription = Omit<OperationDefinition, 'inputSchema'> & {
-  inputSchema: Record<string, unknown>
-}
+export type {
+  OperationDefinition,
+  OperationDescription,
+  OperationSummary,
+} from './operation-types.js'
 
 function operation(definition: OperationDefinition): OperationDefinition {
   return definition
@@ -113,8 +99,8 @@ const definitions: readonly OperationDefinition[] = [
     inputSchema: z.object({
       id: idSchema.optional(),
       domain: domainNameSchema,
-      fromAddress: emailAddressSchema.optional(),
-      replyTo: emailAddressSchema.optional(),
+      fromAddress: emailAddressSchema.nullable().optional(),
+      replyTo: emailAddressSchema.nullable().optional(),
       relayUrl: z.url().max(2_048).nullable().optional(),
       enabled: z.boolean().default(true),
     }),
@@ -257,6 +243,7 @@ const definitions: readonly OperationDefinition[] = [
     },
     inputSchema: paginationSchema.extend({
       inboxId: idSchema.optional(),
+      domainId: idSchema.optional(),
       threadId: idSchema.optional(),
       status: messageStatusSchema.optional(),
       statuses: z.array(messageStatusSchema).min(1).max(4).optional(),
@@ -463,6 +450,33 @@ const definitions: readonly OperationDefinition[] = [
       }),
   }),
   operation({
+    id: 'drafts.forward',
+    category: 'drafts',
+    name: 'Forward a stored email',
+    description:
+      'Prepare a new email that forwards a stored message with its text and attachments',
+    useWhen: ['The owner asked to pass a received email on to someone'],
+    avoidWhen: ['Replying to the sender; use drafts.create'],
+    outcome:
+      'Stores a pending draft with the original quoted and its attachments copied. Approval and sending remain separate steps.',
+    related: ['messages.get', 'drafts.get', 'drafts.approve', 'drafts.send'],
+    safety: {
+      readOnly: false,
+      destructive: false,
+      idempotent: false,
+      requiresApproval: false,
+    },
+    inputSchema: z.object({
+      messageId: idSchema,
+      inboxId: idSchema.optional(),
+      to: recipientListSchema.min(1),
+      cc: recipientListSchema.optional(),
+      note: z.string().trim().max(20_000).optional(),
+      includeAttachments: z.boolean().default(true),
+      source: z.enum(['manual', 'automation', 'agent']).default('manual'),
+    }),
+  }),
+  operation({
     id: 'drafts.approve',
     category: 'drafts',
     name: 'Approve a draft',
@@ -588,6 +602,7 @@ const definitions: readonly OperationDefinition[] = [
       channel: z.enum(['telegram', 'webhook', 'all']).default('all'),
     }),
   }),
+  ...settingsOperations,
   operation({
     id: 'automation.list',
     category: 'automation',
@@ -683,6 +698,10 @@ export function listOperations(
       description,
       safety,
     }))
+}
+
+export function operationIsOwnerOnly(id: string): boolean {
+  return definitionsById.get(id)?.safety.ownerOnly === true
 }
 
 export function getOperationDefinition(

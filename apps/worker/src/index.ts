@@ -24,6 +24,7 @@ import { authorizePage, authorizeSubmit, MCP_PATH, mcpFetch } from './oauth.js'
 import { executeOperation } from './operation-executor.js'
 import { receiveRelayEmail } from './relay-ingress.js'
 import { failure, success } from './responses.js'
+import { effectiveEnv } from './settings.js'
 import type { WorkerApp } from './types.js'
 import { serveWebAsset, WEB_ASSET_PATHS } from './web-assets.js'
 import {
@@ -253,8 +254,10 @@ app.post('/v1/operations/:id', async (context) => {
     const data = await executeOperation(
       {
         env: context.env,
+        rawEnv: rawEnvs.get(context.env) ?? context.env,
         executionCtx: context.executionCtx,
         requestId: context.get('requestId'),
+        actor: context.get('actor'),
       },
       context.req.param('id'),
       payload.params ?? {},
@@ -291,38 +294,55 @@ function usesOAuthProvider(pathname: string): boolean {
   )
 }
 
+/** Remembers the plain Worker environment behind each settings overlay. */
+const rawEnvs = new WeakMap<Env, Env>()
+
+async function withSettings(env: Env): Promise<Env> {
+  const merged = await effectiveEnv(env)
+  if (merged !== env) rawEnvs.set(merged, env)
+  return merged
+}
+
+const STATIC_PATHS = new Set<string>(WEB_ASSET_PATHS)
+
 export default {
   async fetch(
     request: Request,
     env: Env,
     executionCtx: ExecutionContext,
   ): Promise<Response> {
-    if (usesOAuthProvider(new URL(request.url).pathname)) {
-      return mcpFetch(request, env, executionCtx, defaultHandler)
+    const pathname = new URL(request.url).pathname
+    if (STATIC_PATHS.has(pathname) && request.method === 'GET') {
+      return app.fetch(request, env, executionCtx)
     }
-    return app.fetch(request, env, executionCtx)
+    const merged = await withSettings(env)
+    if (usesOAuthProvider(pathname)) {
+      return mcpFetch(request, merged, executionCtx, defaultHandler)
+    }
+    return app.fetch(request, merged, executionCtx)
   },
   async email(
     message: ForwardableEmailMessage,
     env: Env,
     _executionCtx: ExecutionContext,
   ): Promise<void> {
-    await handleInboundEmail(message, env)
+    await handleInboundEmail(message, await withSettings(env))
   },
   async queue(
     batch: MessageBatch<unknown>,
     env: Env,
     executionCtx: ExecutionContext,
   ): Promise<void> {
-    await consumeInboundQueue(batch, env, executionCtx)
+    await consumeInboundQueue(batch, await withSettings(env), executionCtx)
   },
   async scheduled(
     _controller: ScheduledController,
     env: Env,
     executionCtx: ExecutionContext,
   ): Promise<void> {
+    const merged = await withSettings(env)
     executionCtx.waitUntil(
-      Promise.all([sweepPendingInbound(env), pruneAuthFailures(env.DB)]),
+      Promise.all([sweepPendingInbound(merged), pruneAuthFailures(merged.DB)]),
     )
   },
 } satisfies ExportedHandler<Env>

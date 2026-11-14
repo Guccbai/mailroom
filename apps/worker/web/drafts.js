@@ -5,9 +5,11 @@ import { backButton, menuButton } from './layout.js'
 import {
   api,
   confirmDialog,
+  emptyState,
   fullDate,
   go,
   h,
+  icon,
   promptDialog,
   shortDate,
   splitAddresses,
@@ -21,7 +23,7 @@ import {
   attachmentChips,
   attachmentPicker,
   payloadAttachments,
-} from './mail.js'
+} from './thread.js'
 
 /* ---------- compose ---------- */
 
@@ -95,6 +97,7 @@ export async function composePane() {
       { class: 'read-inner' },
       h('div', { class: 'toolbar' }, menuButton(), backButton('#/inbox')),
       h('h1', { class: 'thread-title' }, '写邮件'),
+      h('span', { class: 'title-rule' }),
       h(
         'form',
         { class: 'form', onsubmit: (event) => event.preventDefault() },
@@ -149,13 +152,19 @@ export async function draftsListPane(activeId) {
   )
   const result = await api('drafts.list', { status: state.draftTab, limit: 50 })
   if (!result.items.length)
-    list.append(h('div', { class: 'empty' }, '没有草稿'))
+    list.append(
+      emptyState(
+        'draft',
+        `没有${DRAFT_STATUS[state.draftTab]}的草稿`,
+        state.draftTab === 'pending' ? 'AI 或你起草的邮件会在这里等你批准' : '',
+      ),
+    )
   for (const draft of result.items) {
     list.append(
       h(
         'a',
         {
-          class: `row${draft.id === activeId ? ' active' : ''}`,
+          class: `row plain${draft.id === activeId ? ' active' : ''}`,
           href: `#/draft/${encodeURIComponent(draft.id)}`,
         },
         h(
@@ -171,8 +180,10 @@ export async function draftsListPane(activeId) {
         h(
           'div',
           { class: 'row-subject' },
-          draft.subject,
-          draft.attachmentCount ? h('span', { class: 'clip' }, '📎') : null,
+          h('span', {}, draft.subject),
+          draft.attachmentCount
+            ? h('span', { class: 'clip' }, icon('clip', '有附件'))
+            : null,
         ),
         h(
           'div',
@@ -186,7 +197,7 @@ export async function draftsListPane(activeId) {
     'section',
     { class: 'list-pane' },
     h('div', { class: 'pane-head' }, menuButton(), h('h2', {}, '草稿与审批')),
-    h('div', { class: 'pane-head', style: 'min-height:44px' }, tabs),
+    h('div', { class: 'filters', style: 'padding-top:12px' }, tabs),
     list,
   )
 }
@@ -271,6 +282,7 @@ export async function draftPane(id) {
       { class: 'read-inner' },
       actions,
       h('h1', { class: 'thread-title' }, draft.subject),
+      h('span', { class: 'title-rule' }),
       h(
         'div',
         { class: 'card' },
