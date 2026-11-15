@@ -80,7 +80,10 @@ export function sameOriginRequest(request: Request): boolean {
   const method = request.method.toUpperCase()
   if (method === 'GET' || method === 'HEAD' || method === 'OPTIONS') return true
   const origin = request.headers.get('origin')
-  if (origin) return origin === new URL(request.url).origin
+  // Pages served with `Referrer-Policy: no-referrer` (the OAuth consent page)
+  // make browsers send `Origin: null` on their own form posts, so a null
+  // origin falls back to Fetch Metadata like a missing one.
+  if (origin && origin !== 'null') return origin === new URL(request.url).origin
   return request.headers.get('sec-fetch-site') === 'same-origin'
 }
 
