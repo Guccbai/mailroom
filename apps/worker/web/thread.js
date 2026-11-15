@@ -159,7 +159,7 @@ function messageCard(message, { collapsed, onForward }) {
     h(
       'button',
       {
-        class: 'icon-btn',
+        class: 'b-button b-button--ghost b-button--icon',
         type: 'button',
         title: '转发这封',
         'aria-label': '转发这封',
@@ -230,7 +230,11 @@ export function attachmentPicker(files) {
       { class: 'actions' },
       h(
         'button',
-        { type: 'button', class: 'btn small', onclick: () => input.click() },
+        {
+          type: 'button',
+          class: 'b-button b-button--secondary b-button--sm',
+          onclick: () => input.click(),
+        },
         icon('clip'),
         '添加附件',
       ),
@@ -275,11 +279,15 @@ export async function approveAndSend(draftId, recipients, extra = []) {
 function sendControls(create, recipientsOf, onSent, extraOf = () => []) {
   const sendBtn = h(
     'button',
-    { class: 'btn primary', type: 'button', title: '发送（Ctrl+Enter）' },
+    { class: 'b-button', type: 'button', title: '发送（Ctrl+Enter）' },
     icon('send'),
     '发送',
   )
-  const saveBtn = h('button', { class: 'btn', type: 'button' }, '存为草稿')
+  const saveBtn = h(
+    'button',
+    { class: 'b-button b-button--secondary', type: 'button' },
+    '存为草稿',
+  )
   saveBtn.addEventListener('click', () =>
     withBusy(saveBtn, async () => {
       const draft = await create()
@@ -430,14 +438,14 @@ function toolbarButton(label, iconName, key, onclick, primary = false) {
   return h(
     'button',
     {
-      class: `btn${primary ? ' primary' : ''}`,
+      class: `b-button ${primary ? '' : 'b-button--ghost'}`.trim(),
       type: 'button',
       title: `${label}（${key === 'U' ? 'Shift+U' : key}）`,
       'data-key': key,
       onclick,
     },
     icon(iconName),
-    h('span', { class: 'label' }, label),
+    h('span', { class: 'btn-label' }, label),
   )
 }
 

@@ -15,7 +15,7 @@ import {
 function statusBadge(enabled) {
   return h(
     'span',
-    { class: `badge ${enabled ? 'ok' : 'warn'}` },
+    { class: `b-badge ${enabled ? 'b-badge--success' : 'b-badge--warning'}` },
     enabled ? '启用' : '停用',
   )
 }
@@ -43,7 +43,11 @@ function domainCard(domain, inboxes, routes) {
     value: domain.replyTo ?? '',
     placeholder: '可选',
   })
-  const saveDomain = h('button', { class: 'btn small', type: 'button' }, '保存')
+  const saveDomain = h(
+    'button',
+    { class: 'b-button b-button--secondary b-button--sm', type: 'button' },
+    '保存',
+  )
   saveDomain.addEventListener('click', () =>
     withBusy(saveDomain, async () => {
       await api('domains.upsert', {
@@ -58,7 +62,10 @@ function domainCard(domain, inboxes, routes) {
   )
   const toggleDomain = h(
     'button',
-    { class: `btn small${domain.enabled ? ' danger' : ''}`, type: 'button' },
+    {
+      class: `b-button b-button--sm ${domain.enabled ? 'b-button--danger' : 'b-button--secondary'}`,
+      type: 'button',
+    },
     domain.enabled ? '停用域名' : '启用域名',
   )
   toggleDomain.addEventListener('click', async () => {
@@ -89,7 +96,7 @@ function domainCard(domain, inboxes, routes) {
     const exact = exactFor(inbox)
     const toggle = h(
       'button',
-      { class: 'btn small ghost', type: 'button' },
+      { class: 'b-button b-button--ghost b-button--sm', type: 'button' },
       inbox.enabled ? '停用' : '启用',
     )
     toggle.addEventListener('click', () =>
@@ -108,7 +115,7 @@ function domainCard(domain, inboxes, routes) {
       ? h(
           'button',
           {
-            class: 'btn small ghost',
+            class: 'b-button b-button--ghost b-button--sm',
             type: 'button',
             title: '删除这条路由后，发到这个地址的信只有兜底规则才会收下',
             onclick: async (event) => {
@@ -134,7 +141,7 @@ function domainCard(domain, inboxes, routes) {
       : h(
           'button',
           {
-            class: 'btn small',
+            class: 'b-button b-button--secondary b-button--sm',
             type: 'button',
             onclick: (event) =>
               withBusy(event.currentTarget, async () => {
@@ -165,7 +172,7 @@ function domainCard(domain, inboxes, routes) {
           ? ''
           : h(
               'span',
-              { class: 'badge' },
+              { class: 'b-badge' },
               catchall?.inboxId === inbox.id ? '兜底' : '不收信',
             ),
       ),
@@ -182,7 +189,7 @@ function domainCard(domain, inboxes, routes) {
   const name = h('input', { type: 'text', placeholder: '显示名称，可选' })
   const add = h(
     'button',
-    { class: 'btn primary', type: 'button' },
+    { class: 'b-button', type: 'button' },
     icon('plus'),
     '添加邮箱',
   )
@@ -324,7 +331,7 @@ export async function domainsSection() {
   })
   const add = h(
     'button',
-    { class: 'btn primary', type: 'button' },
+    { class: 'b-button', type: 'button' },
     icon('plus'),
     '添加域名',
   )

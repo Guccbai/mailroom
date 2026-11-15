@@ -49,8 +49,12 @@ export async function composePane() {
   const cc = h('input', { type: 'text', placeholder: '可选' })
   const subject = h('input', { type: 'text', required: true, maxlength: 998 })
   const text = h('textarea', { required: true })
-  const sendBtn = h('button', { class: 'btn primary', type: 'button' }, '发送')
-  const saveBtn = h('button', { class: 'btn', type: 'button' }, '存为草稿')
+  const sendBtn = h('button', { class: 'b-button', type: 'button' }, '发送')
+  const saveBtn = h(
+    'button',
+    { class: 'b-button b-button--secondary', type: 'button' },
+    '存为草稿',
+  )
   const create = async () => {
     if (!fromSelect.value)
       throw new Error('还没有可用的发件邮箱，请先在 Mailroom 中配置域名和邮箱')
@@ -211,7 +215,7 @@ export async function draftPane(id) {
       h(
         'button',
         {
-          class: 'btn primary',
+          class: 'b-button',
           onclick: (event) =>
             withBusy(event.currentTarget, async () => {
               const ok = await confirmDialog(
@@ -239,7 +243,7 @@ export async function draftPane(id) {
         h(
           'button',
           {
-            class: 'btn',
+            class: 'b-button b-button--secondary',
             onclick: (event) =>
               withBusy(event.currentTarget, async () => {
                 await api('drafts.approve', { id, approvedBy: 'owner (web)' })
@@ -255,7 +259,7 @@ export async function draftPane(id) {
       h(
         'button',
         {
-          class: 'btn danger',
+          class: 'b-button b-button--danger',
           onclick: async (event) => {
             const reason = await promptDialog('拒绝这份草稿', '原因')
             if (!reason) return
@@ -296,7 +300,7 @@ export async function draftPane(id) {
             h(
               'span',
               {
-                class: `badge${draft.status === 'sent' ? ' ok' : draft.status === 'failed' ? ' bad' : ''}`,
+                class: `b-badge${draft.status === 'sent' ? ' b-badge--success' : draft.status === 'failed' ? ' b-badge--danger' : ''}`,
               },
               DRAFT_STATUS[draft.status] ?? draft.status,
             ),
@@ -334,7 +338,7 @@ export async function draftPane(id) {
         ? h(
             'a',
             {
-              class: 'btn',
+              class: 'b-button b-button--secondary',
               href: `#/thread/${encodeURIComponent(draft.threadId)}?from=sent`,
             },
             '查看会话',

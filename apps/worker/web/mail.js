@@ -198,7 +198,7 @@ export function messageListPane(name, title, activeThread) {
       h(
         'button',
         {
-          class: 'icon-btn',
+          class: 'b-button b-button--ghost b-button--icon',
           type: 'button',
           title: '刷新',
           'aria-label': '刷新',
@@ -266,7 +266,7 @@ export function messageListPane(name, title, activeThread) {
     if (cursor) {
       const more = h(
         'button',
-        { class: 'btn more', type: 'button' },
+        { class: 'b-button b-button--secondary more', type: 'button' },
         '加载更多',
       )
       more.addEventListener('click', () => withBusy(more, loadPage))

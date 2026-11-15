@@ -44,13 +44,19 @@ export const THEMES = [
   ['dark', '深色'],
 ]
 
+const systemDark = matchMedia('(prefers-color-scheme: dark)')
+
+// Base themes always set html[data-theme]; "auto" resolves it from the system.
 export function applyTheme(theme = readPref('theme', 'auto')) {
-  if (theme === 'light' || theme === 'dark') {
-    document.documentElement.dataset.theme = theme
-  } else {
-    delete document.documentElement.dataset.theme
-  }
+  document.documentElement.dataset.theme =
+    theme === 'light' || theme === 'dark'
+      ? theme
+      : systemDark.matches
+        ? 'dark'
+        : 'light'
 }
+
+systemDark.addEventListener('change', () => applyTheme())
 
 export function setTheme(theme) {
   writePref('theme', theme)
@@ -133,28 +139,20 @@ export function icon(name, label) {
 }
 
 export function mark() {
+  // Mailroom mark: a rounded square with an envelope cut out. Single colour,
+  // follows the text colour (Base logo rule).
   const svg = document.createElementNS(SVG_NS, 'svg')
   svg.setAttribute('viewBox', '0 0 32 32')
   svg.setAttribute('aria-hidden', 'true')
-  const ring = document.createElementNS(SVG_NS, 'circle')
-  for (const [key, value] of Object.entries({
-    cx: 16,
-    cy: 16,
-    r: 13.2,
-    fill: 'none',
-    stroke: '#b4925f',
-    'stroke-width': 1.4,
-  }))
-    ring.setAttribute(key, String(value))
-  const dot = document.createElementNS(SVG_NS, 'circle')
-  for (const [key, value] of Object.entries({
-    cx: 16,
-    cy: 16,
-    r: 4.6,
-    fill: '#b4925f',
-  }))
-    dot.setAttribute(key, String(value))
-  svg.append(ring, dot)
+  svg.setAttribute('class', 'mark')
+  const path = document.createElementNS(SVG_NS, 'path')
+  path.setAttribute('fill', 'currentColor')
+  path.setAttribute('fill-rule', 'evenodd')
+  path.setAttribute(
+    'd',
+    'M8 0h16a8 8 0 0 1 8 8v16a8 8 0 0 1-8 8H8a8 8 0 0 1-8-8V8a8 8 0 0 1 8-8z M7 10.5a1.5 1.5 0 0 1 2.3-1.27L16 13.4l6.7-4.17A1.5 1.5 0 0 1 25 10.5v11a1.5 1.5 0 0 1-1.5 1.5h-15A1.5 1.5 0 0 1 7 21.5z',
+  )
+  svg.append(path)
   return svg
 }
 
@@ -190,7 +188,10 @@ export function errorState(error, retry) {
     retry
       ? h(
           'button',
-          { class: 'btn small', onclick: retry },
+          {
+            class: 'b-button b-button--secondary b-button--sm',
+            onclick: retry,
+          },
           icon('refresh'),
           '重试',
         )
@@ -356,11 +357,11 @@ export function copyBlock(text) {
   return h(
     'div',
     { class: 'copy-row' },
-    h('pre', { class: 'code' }, text),
+    h('pre', { class: 'b-codeblock' }, text),
     h(
       'button',
       {
-        class: 'btn small',
+        class: 'b-button b-button--secondary b-button--sm',
         type: 'button',
         'aria-label': '复制',
         onclick: () => copyText(text),
@@ -384,7 +385,7 @@ export function confirmDialog(title, lines, confirmLabel = '确定') {
         h(
           'button',
           {
-            class: 'btn',
+            class: 'b-button b-button--secondary',
             value: 'cancel',
             onclick: () => dialog.close('cancel'),
           },
@@ -393,7 +394,7 @@ export function confirmDialog(title, lines, confirmLabel = '确定') {
         h(
           'button',
           {
-            class: 'btn primary',
+            class: 'b-button',
             value: 'ok',
             onclick: () => dialog.close('ok'),
           },
@@ -424,13 +425,16 @@ export function promptDialog(title, label) {
         h('span', { class: 'spacer' }),
         h(
           'button',
-          { class: 'btn', onclick: () => dialog.close('cancel') },
+          {
+            class: 'b-button b-button--secondary',
+            onclick: () => dialog.close('cancel'),
+          },
           '取消',
         ),
         h(
           'button',
           {
-            class: 'btn primary',
+            class: 'b-button',
             onclick: () => {
               if (input.value.trim()) dialog.close('ok')
             },
