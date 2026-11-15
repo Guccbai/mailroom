@@ -16,7 +16,8 @@
       "!!**/*.config.ts",
       "!!**/*.config.mts",
       "!!**/worker-configuration.d.ts",
-      "!!**/web-assets.generated.ts"
+      "!!**/web-assets.generated.ts",
+      "!!apps/worker/web/base"
     ]
   },
   "linter": {

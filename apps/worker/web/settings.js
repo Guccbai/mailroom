@@ -30,7 +30,11 @@ export const SETTINGS_TABS = [
 ]
 
 export function badge(ok, yes = '已配置', no = '未配置') {
-  return h('span', { class: `badge ${ok ? 'ok' : 'warn'}` }, ok ? yes : no)
+  return h(
+    'span',
+    { class: `b-badge ${ok ? 'b-badge--success' : 'b-badge--warning'}` },
+    ok ? yes : no,
+  )
 }
 
 const SOURCE_LABEL = {
@@ -68,7 +72,7 @@ export function settingInput(
       ? h(
           'button',
           {
-            class: 'btn small ghost',
+            class: 'b-button b-button--ghost b-button--sm',
             type: 'button',
             title:
               secret || item.value
@@ -190,7 +194,11 @@ async function overviewSection() {
           'dd',
           {},
           status.sending?.mode === 'dry-run'
-            ? h('span', { class: 'badge warn' }, '演练模式，不会真的发出')
+            ? h(
+                'span',
+                { class: 'b-badge b-badge--warning' },
+                '演练模式，不会真的发出',
+              )
             : badge(status.bindings.email, '已连接', '未连接'),
         ),
         h('dt', {}, '搜索'),
@@ -240,7 +248,7 @@ async function notificationsSection() {
     h(
       'button',
       {
-        class: 'btn small',
+        class: 'b-button b-button--secondary b-button--sm',
         type: 'button',
         onclick: (event) =>
           withBusy(event.currentTarget, async () => {
@@ -268,7 +276,7 @@ async function notificationsSection() {
   const tgBoxes = mailboxChecks(notifications.telegram.mailboxes)
   const tgSave = h(
     'button',
-    { class: 'btn primary', type: 'button' },
+    { class: 'b-button', type: 'button' },
     '保存 Telegram 设置',
   )
   tgSave.addEventListener('click', () =>
@@ -302,7 +310,7 @@ async function notificationsSection() {
   const whBoxes = mailboxChecks(notifications.webhook.mailboxes)
   const whSave = h(
     'button',
-    { class: 'btn primary', type: 'button' },
+    { class: 'b-button', type: 'button' },
     '保存 Webhook 设置',
   )
   whSave.addEventListener('click', () => {
@@ -346,7 +354,7 @@ async function notificationsSection() {
       h(
         'div',
         { class: 'field' },
-        h('span', { class: 'label' }, '通知哪些邮箱'),
+        h('span', { class: 'b-field__label' }, '通知哪些邮箱'),
         tgBoxes.element,
       ),
       h(
@@ -370,7 +378,7 @@ async function notificationsSection() {
       h(
         'div',
         { class: 'field' },
-        h('span', { class: 'label' }, '事件'),
+        h('span', { class: 'b-field__label' }, '事件'),
         h(
           'div',
           { class: 'checks' },
@@ -382,7 +390,7 @@ async function notificationsSection() {
       h(
         'div',
         { class: 'field' },
-        h('span', { class: 'label' }, '哪些邮箱'),
+        h('span', { class: 'b-field__label' }, '哪些邮箱'),
         whBoxes.element,
       ),
       h(
@@ -425,7 +433,7 @@ async function notificationsSection() {
                     h(
                       'span',
                       {
-                        class: `badge ${item.state === 'delivered' ? 'ok' : item.state === 'failed' ? 'bad' : ''}`,
+                        class: `b-badge${item.state === 'delivered' ? ' b-badge--success' : item.state === 'failed' ? ' b-badge--danger' : ''}`,
                       },
                       { delivered: '成功', failed: '失败', skipped: '跳过' }[
                         item.state
@@ -469,7 +477,7 @@ async function forwardingSection() {
   }))
   const save = h(
     'button',
-    { class: 'btn primary', type: 'button' },
+    { class: 'b-button', type: 'button' },
     '保存转发设置',
   )
   save.addEventListener('click', () => {
@@ -506,7 +514,7 @@ async function forwardingSection() {
         ? h(
             'div',
             { class: 'field' },
-            h('span', { class: 'label' }, '按域名转发'),
+            h('span', { class: 'b-field__label' }, '按域名转发'),
             domainInputs.map(({ domain, input }) =>
               h(
                 'div',
@@ -547,7 +555,7 @@ async function accountSection() {
     placeholder: location.origin,
     hint: '通知里的「打开邮件」链接用这个地址。留空则用 MCP 请求的地址。',
   })
-  const save = h('button', { class: 'btn primary', type: 'button' }, '保存')
+  const save = h('button', { class: 'b-button', type: 'button' }, '保存')
   save.addEventListener('click', () =>
     saveSettings(save, { MAILROOM_PUBLIC_URL: publicUrl.read }),
   )
@@ -597,7 +605,7 @@ async function accountSection() {
       h(
         'button',
         {
-          class: 'btn',
+          class: 'b-button b-button--secondary',
           type: 'button',
           onclick: async () => {
             await request('/v1/session', { method: 'DELETE' }).catch(

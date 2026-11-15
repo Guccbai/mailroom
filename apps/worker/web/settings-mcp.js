@@ -29,7 +29,7 @@ function showToken(created) {
       h('span', { class: 'spacer' }),
       h(
         'button',
-        { class: 'btn primary', onclick: () => dialog.close() },
+        { class: 'b-button', onclick: () => dialog.close() },
         '我已保存',
       ),
     ),
@@ -43,7 +43,11 @@ function showToken(created) {
 }
 
 function tokensCard(tokens) {
-  const create = h('button', { class: 'btn', type: 'button' }, '创建令牌')
+  const create = h(
+    'button',
+    { class: 'b-button b-button--secondary', type: 'button' },
+    '创建令牌',
+  )
   create.addEventListener('click', async () => {
     const name = await promptDialog(
       '创建访问令牌',
@@ -98,7 +102,7 @@ function tokensCard(tokens) {
                   h(
                     'button',
                     {
-                      class: 'btn small danger',
+                      class: 'b-button b-button--danger b-button--sm',
                       type: 'button',
                       onclick: async (event) => {
                         const button = event.currentTarget

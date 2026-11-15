@@ -29,7 +29,7 @@ export function renderLogin(message) {
   })
   const button = h(
     'button',
-    { class: 'btn primary', type: 'submit', style: 'width:100%' },
+    { class: 'b-button b-button--block', type: 'submit' },
     '登录',
   )
   const form = h(
@@ -95,7 +95,7 @@ export function renderNoPassword() {
         ),
         h(
           'pre',
-          { class: 'code' },
+          { class: 'b-codeblock' },
           'wrangler secret put MAILROOM_WEB_PASSWORD',
         ),
       ),
@@ -247,7 +247,7 @@ export function shell(
     h(
       'a',
       {
-        class: 'btn primary compose-btn',
+        class: 'b-button b-button--accent compose-btn',
         href: '#/compose',
         title: '写邮件（c）',
       },
@@ -306,11 +306,39 @@ export function shell(
   )
   if (listPane) root.append(listPane)
   if (readPane) root.append(readPane)
+  root.append(tabBar(active))
   root.addEventListener('click', (event) => {
     if (event.target.closest('[data-menu]')) root.classList.toggle('nav-open')
   })
   app.replaceChildren(root)
   return root
+}
+
+const TABS = [
+  ['inbox', '收件箱', 'inbox'],
+  ['sent', '已发送', 'send'],
+  ['drafts', '草稿', 'draft'],
+  ['settings', '设置', 'settings'],
+]
+
+// Phone-only primary navigation (Base: bottom TabBar below 640px).
+function tabBar(active) {
+  return h(
+    'nav',
+    { class: 'b-tabbar b-tabbar--fixed tabbar', 'aria-label': '主要导航' },
+    TABS.map(([key, label, iconName]) =>
+      h(
+        'a',
+        {
+          class: 'b-tabbar__item',
+          href: `#/${key}`,
+          'aria-current': active === key ? 'page' : null,
+        },
+        icon(iconName),
+        h('span', {}, label),
+      ),
+    ),
+  )
 }
 
 export function scopeLabel() {
@@ -338,7 +366,7 @@ export function menuButton() {
   return h(
     'button',
     {
-      class: 'icon-btn menu-btn',
+      class: 'b-button b-button--ghost b-button--icon menu-btn',
       type: 'button',
       'data-menu': '1',
       'aria-label': '菜单',
@@ -351,7 +379,7 @@ export function backButton(href) {
   return h(
     'a',
     {
-      class: 'icon-btn',
+      class: 'b-button b-button--ghost b-button--icon',
       href,
       'aria-label': '返回列表',
       title: '返回（u）',

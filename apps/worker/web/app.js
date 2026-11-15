@@ -141,7 +141,7 @@ start().catch((error) => {
         h('p', { class: 'error' }, error.message),
         h(
           'button',
-          { class: 'btn primary', onclick: () => location.reload() },
+          { class: 'b-button', onclick: () => location.reload() },
           '重新加载',
         ),
       ),

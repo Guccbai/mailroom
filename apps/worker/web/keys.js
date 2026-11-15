@@ -54,7 +54,14 @@ export function showShortcuts() {
       'div',
       { class: 'actions' },
       h('span', { class: 'spacer' }),
-      h('button', { class: 'btn', onclick: () => dialog.close() }, '关闭'),
+      h(
+        'button',
+        {
+          class: 'b-button b-button--secondary',
+          onclick: () => dialog.close(),
+        },
+        '关闭',
+      ),
     ),
   )
   dialog.addEventListener('close', () => dialog.remove())

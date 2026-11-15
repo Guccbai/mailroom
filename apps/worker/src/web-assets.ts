@@ -20,7 +20,9 @@ export function webSecurityHeaders(type: string, etag: string): HeadersInit {
   return {
     'content-type': type,
     etag,
-    'cache-control': 'no-cache',
+    'cache-control': type.startsWith('font/')
+      ? 'public, max-age=86400'
+      : 'no-cache',
     'content-security-policy': CONTENT_SECURITY_POLICY,
     'x-content-type-options': 'nosniff',
     'x-frame-options': 'DENY',
@@ -41,5 +43,18 @@ export function serveWebAsset(
   if (ifNoneMatch === asset.etag) {
     return new Response(null, { status: 304, headers })
   }
-  return new Response(asset.body, { headers })
+  return new Response(asset.base64 ? decodeBase64(asset.body) : asset.body, {
+    headers,
+  })
+}
+
+const decoded = new Map<string, ArrayBuffer>()
+
+function decodeBase64(body: string): ArrayBuffer {
+  let bytes = decoded.get(body)
+  if (!bytes) {
+    bytes = Uint8Array.from(atob(body), (char) => char.charCodeAt(0)).buffer
+    decoded.set(body, bytes)
+  }
+  return bytes
 }
