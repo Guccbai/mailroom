@@ -21,18 +21,12 @@ type DefaultHandler = ExportedHandler<Env> & {
   fetch: NonNullable<ExportedHandler<Env>['fetch']>
 }
 
-/** Canonical public origin: MAILROOM_PUBLIC_URL when set, else the request. */
-export function publicOrigin(
-  env: Pick<Env, 'MAILROOM_PUBLIC_URL'>,
-  request: Request,
-): string {
-  if (env.MAILROOM_PUBLIC_URL?.trim()) {
-    try {
-      return new URL(env.MAILROOM_PUBLIC_URL.trim()).origin
-    } catch {
-      // Fall back to the request origin when the variable is malformed.
-    }
-  }
+/**
+ * The MCP resource is whatever origin the client connected to, so the same
+ * Worker can serve OAuth on its workers.dev address and on custom domains.
+ * MAILROOM_PUBLIC_URL only sets the links in notifications.
+ */
+function requestOrigin(request: Request): string {
   return new URL(request.url).origin
 }
 
@@ -41,7 +35,7 @@ export function oauthOptions(
   request: Request,
   defaultHandler: DefaultHandler,
 ): OAuthProviderOptions<Env> {
-  const resource = `${publicOrigin(env, request)}${MCP_PATH}`
+  const resource = `${requestOrigin(request)}${MCP_PATH}`
   return {
     apiRoute: MCP_PATH,
     apiHandler: {

@@ -182,6 +182,17 @@ describe('remote MCP', () => {
     })
   })
 
+  it('ties the OAuth resource to the host the client used', async () => {
+    const env = await createTestEnv({
+      MAILROOM_PUBLIC_URL: 'https://other.example.net',
+    })
+    const metadata = await call(
+      env,
+      '/.well-known/oauth-protected-resource/mcp',
+    )
+    expect(await metadata.json()).toMatchObject({ resource: `${ORIGIN}/mcp` })
+  })
+
   it('lists the three discovery tools and runs operations with a static token', async () => {
     const env = await createTestEnv({
       MAILROOM_MCP_TOKEN: 'mcp-token-0123456789abcdef0123',
