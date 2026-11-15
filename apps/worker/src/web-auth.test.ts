@@ -81,6 +81,21 @@ describe('same-origin checks', () => {
       true,
     )
   })
+
+  it('falls back to Fetch Metadata when the origin is null', () => {
+    // A form on a no-referrer page posting to itself (OAuth consent).
+    expect(
+      sameOriginRequest(
+        post({ origin: 'null', 'sec-fetch-site': 'same-origin' }),
+      ),
+    ).toBe(true)
+    expect(
+      sameOriginRequest(
+        post({ origin: 'null', 'sec-fetch-site': 'cross-site' }),
+      ),
+    ).toBe(false)
+    expect(sameOriginRequest(post({ origin: 'null' }))).toBe(false)
+  })
 })
 
 describe('password checks', () => {
