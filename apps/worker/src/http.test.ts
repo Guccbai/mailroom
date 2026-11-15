@@ -281,6 +281,10 @@ describe('remote MCP', () => {
     expect(html).toContain('client.example.org')
     expect(html).toContain('type="password"')
     expect(page.headers.get('x-frame-options')).toBe('DENY')
+    // The approval redirects to the client, so the form must allow its origin.
+    expect(page.headers.get('content-security-policy')).toContain(
+      "form-action 'self' https://client.example.org;",
+    )
   })
 
   it('completes the OAuth flow with the password and serves MCP with the token', async () => {

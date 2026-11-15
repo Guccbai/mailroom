@@ -82,10 +82,27 @@ function escapeHtml(value: string): string {
 const PAGE_HEADERS = {
   'content-type': 'text/html; charset=utf-8',
   'cache-control': 'no-store',
-  'content-security-policy':
-    "default-src 'none'; style-src 'unsafe-inline'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'",
   'x-frame-options': 'DENY',
   'referrer-policy': 'no-referrer',
+}
+
+function pagePolicy(formActions: string[]): string {
+  return `default-src 'none'; style-src 'unsafe-inline'; form-action ${["'self'", ...formActions].join(' ')}; frame-ancestors 'none'; base-uri 'none'`
+}
+
+/**
+ * CSP source for the client's redirect URI. Browsers apply `form-action` to
+ * the redirect that follows a form post, so the consent form must allow the
+ * client's callback or the approval never reaches it.
+ */
+export function redirectSource(redirectUri: string): string | null {
+  try {
+    const url = new URL(redirectUri)
+    if (url.protocol === 'https:' || url.protocol === 'http:') return url.origin
+    return /^[a-z][a-z0-9+.-]*:$/i.test(url.protocol) ? url.protocol : null
+  } catch {
+    return null
+  }
 }
 
 function page(
@@ -93,8 +110,10 @@ function page(
   body: string,
   status = 200,
   extra?: Headers,
+  formActions: string[] = [],
 ): Response {
   const headers = new Headers(PAGE_HEADERS)
+  headers.set('content-security-policy', pagePolicy(formActions))
   extra?.forEach((value, key) => {
     // Our page policy already forbids framing and is stricter overall.
     if (key.toLowerCase() === 'set-cookie') headers.append(key, value)
@@ -165,7 +184,14 @@ ${consent.redirectIsLoopback ? '<p class="warn">这个地址在本机上，任�
 ${signedIn ? '<p>你已登录网页后台。</p>' : '<label for="password">网页后台密码</label><input id="password" name="password" type="password" autocomplete="current-password" required>'}
 <div class="row"><button name="action" value="deny" formnovalidate>拒绝</button><button class="primary" name="action" value="approve">允许</button></div>
 </form>`
-  return page('授权 Mailroom', body, 200, transaction.headers)
+  const callback = redirectSource(consent.redirectUri)
+  return page(
+    '授权 Mailroom',
+    body,
+    200,
+    transaction.headers,
+    callback ? [callback] : [],
+  )
 }
 
 export async function authorizeSubmit(
