@@ -6,6 +6,7 @@ import {
   signIngressRequest,
   verifyRelayRequest,
 } from '@mailroom/core'
+import { ResendError, sendWithResend } from './resend.js'
 
 const jsonHeaders = { 'content-type': 'application/json' }
 
@@ -121,6 +122,32 @@ async function send(request: Request, env: Env): Promise<Response> {
       { ok: false, error: { message: 'The From domain is not allowed.' } },
       403,
     )
+  }
+  if (env.RESEND_API_KEY) {
+    try {
+      const result = await sendWithResend(
+        env.RESEND_API_KEY,
+        message.data,
+        signed.idempotencyKey,
+      )
+      console.log('mailroom_relay_sent', {
+        provider: 'resend',
+        providerId: result.providerId,
+      })
+      return json({ ok: true, messageId: result.messageId })
+    } catch (error) {
+      const status =
+        error instanceof ResendError && error.status < 500 ? 400 : 502
+      return json(
+        {
+          ok: false,
+          error: {
+            message: error instanceof Error ? error.message : String(error),
+          },
+        },
+        status,
+      )
+    }
   }
   const result = await env.EMAIL.send(emailBuilder(message.data))
   return json({ ok: true, messageId: result.messageId })

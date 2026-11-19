@@ -142,6 +142,20 @@ pnpm --filter @mailroom/ingress exec wrangler secret put \
 Use the central Worker forwarding secrets only for domains in its own account.
 Use the ingress Worker forwarding secrets for domains in another account.
 
+### Sending through Resend
+
+An ingress Worker normally sends outbound mail with its Cloudflare Email
+Service binding. When the domain's Cloudflare account cannot send (for
+example, a free account), set `RESEND_API_KEY` on that ingress Worker and it
+sends through Resend instead. The domain must be verified in Resend. Mailroom
+still records the sent message as usual, and other domains are unaffected.
+A sending-only key restricted to that domain is enough.
+
+```sh
+pnpm --filter @mailroom/ingress exec wrangler secret put \
+  RESEND_API_KEY --config wrangler.local.jsonc
+```
+
 On macOS you can create a random value without printing it:
 
 ```sh

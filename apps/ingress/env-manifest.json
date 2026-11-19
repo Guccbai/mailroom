@@ -7,7 +7,8 @@
   ],
   "optionalSecrets": [
     "MAILROOM_FORWARD_TO",
-    "MAILROOM_FORWARD_TO_BY_DOMAIN"
+    "MAILROOM_FORWARD_TO_BY_DOMAIN",
+    "RESEND_API_KEY"
   ],
   "variables": {
     "CENTRAL_MAILROOM_URL": "Public HTTPS URL of the central Worker",
