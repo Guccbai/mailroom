@@ -9,6 +9,7 @@ interface __BaseEnv_Env {
 	INGRESS_SECRET: string;
 	MAILROOM_FORWARD_TO: string;
 	MAILROOM_FORWARD_TO_BY_DOMAIN: string;
+	RESEND_API_KEY?: string;
 }
 declare namespace Cloudflare {
 	interface GlobalProps {
@@ -21,7 +22,7 @@ type StringifyValues<EnvType extends Record<string, unknown>> = {
 	[Binding in keyof EnvType]: EnvType[Binding] extends string ? EnvType[Binding] : string;
 };
 declare namespace NodeJS {
-	interface ProcessEnv extends StringifyValues<Pick<Cloudflare.Env, "CENTRAL_MAILROOM_URL" | "ALLOWED_FROM_DOMAINS" | "MAX_EMAIL_BYTES" | "INGRESS_SECRET" | "MAILROOM_FORWARD_TO" | "MAILROOM_FORWARD_TO_BY_DOMAIN">> {}
+	interface ProcessEnv extends StringifyValues<Pick<Cloudflare.Env, "CENTRAL_MAILROOM_URL" | "ALLOWED_FROM_DOMAINS" | "MAX_EMAIL_BYTES" | "INGRESS_SECRET" | "MAILROOM_FORWARD_TO" | "MAILROOM_FORWARD_TO_BY_DOMAIN" | "RESEND_API_KEY">> {}
 }
 declare module "*.txt" {
 	const value: string;
